@@ -1,0 +1,37 @@
+# Root env and secrets
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Backend build/runtime
+ticket_backend/.pytest_cache/
+ticket_backend/.ruff_cache/
+
+# Node / Next.js
+node_modules/
+ticket_frontend/node_modules/
+ticket_frontend/.next/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
