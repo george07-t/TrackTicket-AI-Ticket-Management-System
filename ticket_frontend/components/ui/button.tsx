@@ -6,15 +6,15 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 export function Button({ variant = "primary", className = "", ...props }: ButtonProps) {
   const styles: Record<string, string> = {
-    primary: "bg-[var(--brand)] text-white hover:opacity-90",
-    secondary: "bg-white text-[var(--ink)] border border-[var(--line)] hover:bg-[var(--paper)]",
-    danger: "bg-[var(--danger)] text-white hover:opacity-90",
+    primary: "border border-[var(--brand)] bg-[var(--brand)] text-white hover:bg-[var(--brand-strong)]",
+    secondary: "border border-[var(--line)] bg-white text-[var(--ink)] hover:bg-[var(--paper)]",
+    danger: "border border-[var(--danger)] bg-[var(--danger)] text-white hover:opacity-90",
   };
 
   return (
     <button
       {...props}
-      className={`h-10 rounded-md px-4 text-sm font-semibold transition ${styles[variant]} ${className}`}
+      className={`focus-ring h-10 rounded-lg px-4 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-60 ${styles[variant]} ${className}`}
     />
   );
 }

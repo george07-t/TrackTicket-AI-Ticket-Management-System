@@ -10,6 +10,10 @@ Stack:
 - Frontend: Next.js 16, TypeScript, Tailwind, Zustand, TanStack Query, Axios
 - Deployment: Docker Compose (optional for local), EC2 + Nginx
 
+Important:
+- Use only the root `docker-compose.yml` for containerized runs.
+- Do not use `ticket_backend/docker-compose.yml` for this project workflow.
+
 ## Project Structure
 
 - `ticket_backend` FastAPI API server
@@ -78,6 +82,24 @@ Copy-Item .env.example .env
 docker compose up --build -d
 ```
 
+What root compose now does automatically:
+- waits for PostgreSQL health before backend startup
+- runs `alembic upgrade head` before starting API
+- builds frontend with `NEXT_PUBLIC_API_URL` from root `.env`
+
+Run seed inside Docker:
+
+```powershell
+docker compose --profile seed run --rm seed
+```
+
+Or run app and seed together in one flow:
+
+```powershell
+docker compose --profile seed up --build -d
+docker compose --profile seed run --rm seed
+```
+
 Check running services:
 
 ```powershell
@@ -107,7 +129,8 @@ docker compose down -v
 ## Environment Variables Ownership
 
 Shared root `.env`:
-- Used by backend container and frontend container in Docker via `env_file`
+- Used by backend container via `env_file`
+- Used by docker compose variable substitution (build args and service env values)
 - Used by backend local run (through settings env_file fallback)
 
 Backend-only runtime vars:

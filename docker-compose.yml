@@ -8,26 +8,60 @@ services:
       POSTGRES_DB: ${POSTGRES_DB}
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
-    build: ./ticket_backend
+    build:
+      context: ./ticket_backend
     restart: unless-stopped
-    depends_on:
-      - db
     env_file:
       - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2"
     ports:
       - "8000:8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=5)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
-  frontend:
-    build: ./ticket_frontend
-    restart: unless-stopped
-    depends_on:
-      - backend
+  seed:
+    build:
+      context: ./ticket_backend
     env_file:
       - .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: sh -c "alembic upgrade head && python seed.py"
+    restart: "no"
+    profiles: ["seed"]
+
+  frontend:
+    build:
+      context: ./ticket_frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
     ports:
       - "3000:3000"
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://127.0.0.1:3000"]
+      interval: 20s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

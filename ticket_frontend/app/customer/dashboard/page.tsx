@@ -30,7 +30,14 @@ export default function CustomerDashboardPage() {
               </Link>
             </td>
             <td className="px-4 py-3"><StatusBadge status={ticket.status} /></td>
-            <td className="px-4 py-3"><AiBadge category={ticket.category} priority={ticket.priority} /></td>
+            <td className="px-4 py-3">
+              <AiBadge
+                category={ticket.category}
+                priority={ticket.priority}
+                aiClassified={ticket.ai_classified}
+                aiConfidenceNote={ticket.ai_confidence_note}
+              />
+            </td>
             <td className="px-4 py-3 text-[var(--muted)]">{new Date(ticket.updated_at).toLocaleString()}</td>
           </tr>
         ))}

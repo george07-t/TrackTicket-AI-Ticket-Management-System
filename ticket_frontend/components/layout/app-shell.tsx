@@ -19,7 +19,7 @@ export function AppShell({ role, children }: { role: Role; children: React.React
       <Sidebar role={role} />
       <div className="flex-1">
         <Navbar />
-        <main className="p-6">{children}</main>
+        <main className="p-4 sm:p-6">{children}</main>
       </div>
     </div>
   );

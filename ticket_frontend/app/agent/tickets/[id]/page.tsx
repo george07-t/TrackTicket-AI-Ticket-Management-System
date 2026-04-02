@@ -3,10 +3,14 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 
+import { ActivityTimeline } from "@/components/tickets/activity-timeline";
+import { AiSuggestedReply } from "@/components/tickets/ai-suggested-reply";
 import { CommentBox } from "@/components/tickets/comment-box";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { Skeleton } from "@/components/ui/skeleton";
+import { api, getApiErrorMessage } from "@/lib/api";
 import { Comment, Status, Ticket } from "@/lib/types";
 
 const statuses: Status[] = ["open", "in_progress", "resolved", "closed"];
@@ -24,27 +28,68 @@ export default function AgentTicketDetailPage() {
     queryFn: async () => (await api.get<Comment[]>(`/tickets/${id}/comments`)).data,
   });
 
-  const [status, setStatus] = useState<Status>("open");
+  const [statusOverride, setStatusOverride] = useState<Status | null>(null);
+  const [draftReply, setDraftReply] = useState("");
+  const [isGeneratingAiReply, setIsGeneratingAiReply] = useState(false);
 
   async function updateStatus() {
-    await api.patch(`/tickets/${id}`, { status });
-    await queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+    const status = statusOverride ?? ticket?.status ?? "open";
+    try {
+      await api.patch(`/tickets/${id}`, { status });
+      toast.success("Ticket status updated");
+      setStatusOverride(null);
+      await queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to update status"));
+    }
   }
 
   async function addComment(body: string, isInternal: boolean) {
-    await api.post(`/tickets/${id}/comments`, { body, is_internal: isInternal });
-    await queryClient.invalidateQueries({ queryKey: ["ticket-comments", id] });
+    try {
+      await api.post(`/tickets/${id}/comments`, { body, is_internal: isInternal });
+      toast.success(isInternal ? "Internal note added" : "Reply sent");
+      await queryClient.invalidateQueries({ queryKey: ["ticket-comments", id] });
+      await queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+      setDraftReply("");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to send comment"));
+    }
   }
 
-  if (!ticket) return null;
+  async function generateReply(force = false) {
+    setIsGeneratingAiReply(true);
+    try {
+      await api.post(`/tickets/${id}/ai-reply`, { force });
+      toast.success(force ? "AI reply regenerated" : "AI reply generated");
+      await queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to generate AI reply"));
+    } finally {
+      setIsGeneratingAiReply(false);
+    }
+  }
+
+  if (!ticket) {
+    return (
+      <div className="space-y-3">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-20 w-full" />
+      </div>
+    );
+  }
 
   return (
     <section className="space-y-4 fade-in">
       <div className="rounded-xl border border-[var(--line)] bg-white p-5">
+        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">#{ticket.id.slice(0, 8).toUpperCase()}</p>
         <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
         <p className="mt-2 text-[var(--muted)]">{ticket.description}</p>
         <div className="mt-4 flex items-center gap-2">
-          <select className="h-10 rounded-md border border-[var(--line)] px-3" value={status} onChange={(e) => setStatus(e.target.value as Status)}>
+          <select
+            className="h-10 rounded-md border border-[var(--line)] px-3"
+            value={statusOverride ?? ticket.status}
+            onChange={(e) => setStatusOverride(e.target.value as Status)}
+          >
             {statuses.map((item) => (
               <option key={item} value={item}>
                 {item}
@@ -55,7 +100,15 @@ export default function AgentTicketDetailPage() {
         </div>
       </div>
 
-      <CommentBox canInternal={true} onSubmit={addComment} />
+      <AiSuggestedReply
+        suggestion={ticket.ai_suggested_response}
+        onUse={setDraftReply}
+        onGenerate={async () => generateReply(false)}
+        onRegenerate={async () => generateReply(true)}
+        isGenerating={isGeneratingAiReply}
+      />
+
+      <CommentBox canInternal={true} onSubmit={addComment} value={draftReply} onValueChange={setDraftReply} />
 
       <div className="space-y-3">
         {comments.map((comment) => (
@@ -67,6 +120,8 @@ export default function AgentTicketDetailPage() {
           </article>
         ))}
       </div>
+
+      <ActivityTimeline activities={ticket.activities ?? []} />
     </section>
   );
 }

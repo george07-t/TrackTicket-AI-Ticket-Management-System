@@ -9,6 +9,18 @@ export const api = axios.create({
   timeout: 15000,
 });
 
+export function getApiErrorMessage(error: unknown, fallback = "Request failed"): string {
+  if (axios.isAxiosError(error)) {
+    const detail = error.response?.data?.detail;
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      const first = detail[0]?.msg;
+      if (typeof first === "string") return first;
+    }
+  }
+  return fallback;
+}
+
 api.interceptors.request.use((config) => {
   const token = getToken();
   if (token) {
@@ -20,7 +32,18 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error?.response?.status === 401 && typeof window !== "undefined") {
+    const url: string = error?.config?.url ?? "";
+    const isPublicAuthCall = [
+      "/auth/login",
+      "/auth/register",
+      "/auth/forgot-password",
+      "/auth/verify-reset-otp",
+      "/auth/reset-password",
+      "/auth/verify-email-otp",
+      "/auth/resend-email-otp",
+    ].some((endpoint) => url.includes(endpoint));
+
+    if (error?.response?.status === 401 && typeof window !== "undefined" && !isPublicAuthCall) {
       clearAuthSession();
       window.location.href = "/login";
     }

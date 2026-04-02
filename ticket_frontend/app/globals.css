@@ -1,14 +1,17 @@
 @import "tailwindcss";
 
 :root {
-  --surface: #f4f5f1;
-  --paper: #f1f2ea;
-  --ink: #1d2a2a;
-  --muted: #5d6b69;
-  --line: #d8ddd5;
-  --brand: #0f766e;
-  --brand-soft: #bde8de;
+  --surface: #f6f7f9;
+  --paper: #eff1f4;
+  --panel: #ffffff;
+  --ink: #111827;
+  --muted: #5b6472;
+  --line: #d8dde5;
+  --brand: #1f4ed8;
+  --brand-strong: #1e40af;
+  --brand-soft: #dbe6ff;
   --danger: #b42318;
+  --success: #0f766e;
 }
 
 @theme inline {
@@ -22,12 +25,32 @@ body {
   font-family: var(--font-sans), sans-serif;
 }
 
+a {
+  color: inherit;
+}
+
 * {
   box-sizing: border-box;
 }
 
 .fade-in {
   animation: fade-in 0.35s ease-out;
+}
+
+.card {
+  border: 1px solid var(--line);
+  background: var(--panel);
+  border-radius: 14px;
+}
+
+.focus-ring {
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.focus-ring:focus-visible {
+  outline: none;
+  border-color: var(--brand);
+  box-shadow: 0 0 0 3px rgba(31, 78, 216, 0.12);
 }
 
 @keyframes fade-in {

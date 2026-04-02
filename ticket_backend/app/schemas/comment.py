@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.schemas.user import UserOut
 
@@ -9,6 +9,14 @@ from app.schemas.user import UserOut
 class CommentCreate(BaseModel):
     body: str
     is_internal: bool = False
+
+    @field_validator("body")
+    @classmethod
+    def body_not_empty(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Comment body cannot be empty")
+        return v
 
 
 class CommentOut(BaseModel):
