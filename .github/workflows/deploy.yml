@@ -1,0 +1,86 @@
+name: Deploy TrackTicket
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      run_seed:
+        description: "Run docker seed job after deploy"
+        required: false
+        default: false
+        type: boolean
+
+concurrency:
+  group: deploy-trackticket-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Deploy on EC2 via SSH
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          RUN_SEED: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_seed || 'false' }}
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script_stop: true
+          command_timeout: 30m
+          script: |
+            set -euo pipefail
+
+            PROJECT_PATH="${{ secrets.EC2_PROJECT_PATH }}"
+            REPO_URL="${{ secrets.REPO_SSH_URL }}"
+            BRANCH="main"
+
+            if [ ! -d "$PROJECT_PATH/.git" ]; then
+              echo "Project not found on server. Cloning..."
+              mkdir -p "$PROJECT_PATH"
+              git clone "$REPO_URL" "$PROJECT_PATH"
+            fi
+
+            cd "$PROJECT_PATH"
+
+            echo "Syncing code..."
+            git fetch origin "$BRANCH"
+            git checkout "$BRANCH"
+            git pull --ff-only origin "$BRANCH"
+
+            echo "Writing runtime .env from GitHub secret..."
+            cat > .env << 'EOF'
+            ${{ secrets.APP_ENV_FILE }}
+            EOF
+            chmod 600 .env
+
+            echo "Building containers sequentially (low-memory friendly)..."
+            COMPOSE_PARALLEL_LIMIT=1 docker compose build db
+            COMPOSE_PARALLEL_LIMIT=1 docker compose build backend
+            COMPOSE_PARALLEL_LIMIT=1 docker compose build --no-cache frontend
+
+            echo "Starting services..."
+            docker compose up -d
+
+            if [ "$RUN_SEED" = "true" ]; then
+              echo "Running seed profile..."
+              docker compose --profile seed run --rm seed
+            else
+              echo "Seed step skipped."
+            fi
+
+            echo "Reloading Nginx..."
+            sudo systemctl reload nginx
+
+            echo "Health checks..."
+            curl -fsS http://127.0.0.1:8000/health > /dev/null
+            curl -fsS http://127.0.0.1:3000 > /dev/null
+
+            echo "Deploy successful."
