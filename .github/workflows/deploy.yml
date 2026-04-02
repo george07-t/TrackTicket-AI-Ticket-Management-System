@@ -33,6 +33,7 @@ jobs:
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
+          envs: RUN_SEED
           script_stop: true
           command_timeout: 30m
           script: |
@@ -54,12 +55,6 @@ jobs:
             git fetch origin "$BRANCH"
             git checkout "$BRANCH"
             git pull --ff-only origin "$BRANCH"
-
-            echo "Writing runtime .env from GitHub secret..."
-            cat > .env << 'EOF'
-            ${{ secrets.APP_ENV_FILE }}
-            EOF
-            chmod 600 .env
 
             echo "Building containers sequentially (low-memory friendly)..."
             COMPOSE_PARALLEL_LIMIT=1 docker compose build db
