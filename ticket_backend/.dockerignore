@@ -1,0 +1,32 @@
+# VCS
+.git
+.gitignore
+
+# Secrets
+.env
+.env.*
+
+# Python environment and cache
+.venv
+__pycache__
+**/__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.coverage
+htmlcov
+
+# Local DB and logs
+*.db
+*.sqlite
+*.sqlite3
+*.log
+
+# Local tooling and docs not needed in image build context
+.vscode
+.idea
+README.md
+docker-compose.yml

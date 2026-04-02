@@ -1,0 +1,29 @@
+# VCS
+.git
+.gitignore
+
+# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Python local env/cache
+.venv
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/*.pyd
+
+# Node/Next local artifacts
+**/node_modules
+**/.next
+
+# Logs and editor files
+**/*.log
+.vscode
+.idea
+.DS_Store
+Thumbs.db
+
+# Docker runtime leftovers
+**/.docker
