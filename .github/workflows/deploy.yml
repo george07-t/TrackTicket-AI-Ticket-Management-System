@@ -66,6 +66,9 @@ jobs:
             COMPOSE_PARALLEL_LIMIT=1 docker compose build backend
             COMPOSE_PARALLEL_LIMIT=1 docker compose build --no-cache frontend
 
+            echo "Running migrations..."
+            docker compose run --rm backend alembic upgrade head
+
             echo "Starting services (staged startup)..."
             docker compose up -d db
             docker compose up -d backend
@@ -98,6 +101,7 @@ jobs:
 
             if [ "$RUN_SEED" = "true" ]; then
               echo "Running seed profile..."
+              docker compose run --rm backend alembic upgrade head
               docker compose --profile seed run --rm seed
             else
               echo "Seed step skipped."
