@@ -556,6 +556,7 @@ async def generate_ai_reply(
 @router.delete("/{ticket_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_ticket(
     ticket_id: uuid.UUID,
+    permanent: bool = Query(default=False),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.CUSTOMER)),
 ) -> None:
@@ -565,6 +566,16 @@ async def delete_ticket(
 
     if current_user.role == UserRole.CUSTOMER and ticket.created_by != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    if permanent:
+        if current_user.role != UserRole.ADMIN:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only admins can permanently delete tickets",
+            )
+        await db.delete(ticket)
+        await db.commit()
+        return
 
     if ticket.is_deleted_for_customer:
         return

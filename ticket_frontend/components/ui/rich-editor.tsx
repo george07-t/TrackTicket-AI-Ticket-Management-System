@@ -1,15 +1,11 @@
 "use client";
 
-import { forwardRef, useImperativeHandle, useRef, useState } from "react";
-import type { ClipboardEvent, ReactNode } from "react";
+import { forwardRef, useImperativeHandle } from "react";
+import type { ReactNode } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Underline from "@tiptap/extension-underline";
 import Placeholder from "@tiptap/extension-placeholder";
-import Image from "@tiptap/extension-image";
-import { toast } from "react-toastify";
-
-import { api, getApiErrorMessage, getMediaUrl } from "@/lib/api";
 
 export type RichEditorHandle = {
   insertContent: (html: string) => void;
@@ -97,22 +93,6 @@ function CodeIcon() {
   );
 }
 
-function ImageIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function Spinner() {
-  return (
-    <svg className="h-3.5 w-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
-}
 
 function ToolbarBtn({
   active,
@@ -147,15 +127,11 @@ export const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEdito
   { content = "", onChange, placeholder = "Write something…", disabled = false, minHeight = "8rem" },
   ref
 ) {
-  const fileRef = useRef<HTMLInputElement>(null);
-  const [uploading, setUploading] = useState(false);
-
   const editor = useEditor({
     extensions: [
       StarterKit,
       Underline,
       Placeholder.configure({ placeholder }),
-      Image.configure({ inline: false, allowBase64: false }),
     ],
     content,
     editable: !disabled,
@@ -175,35 +151,6 @@ export const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEdito
     getHTML: () => editor?.getHTML() ?? "",
     isEmpty: () => editor?.isEmpty ?? true,
   }));
-
-  async function uploadAndInsert(file: File) {
-    const ALLOWED = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-    if (!ALLOWED.has(file.type)) {
-      toast.error("Only image files are allowed (jpeg, png, gif, webp).");
-      return;
-    }
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const { data } = await api.post<{ url: string }>("/attachments/upload", form);
-      editor?.chain().focus().setImage({ src: getMediaUrl(data.url) }).run();
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to upload image."));
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function handlePaste(e: ClipboardEvent<HTMLDivElement>) {
-    const imageItem = Array.from(e.clipboardData.items).find((item) =>
-      item.type.startsWith("image/")
-    );
-    if (!imageItem) return;
-    e.preventDefault();
-    const file = imageItem.getAsFile();
-    if (file) void uploadAndInsert(file);
-  }
 
   return (
     <div className="overflow-hidden rounded-lg border border-[var(--line)] bg-white transition-colors focus-within:border-[var(--brand)] focus-within:ring-2 focus-within:ring-[var(--brand-soft)]">
@@ -238,29 +185,11 @@ export const RichEditor = forwardRef<RichEditorHandle, Props>(function RichEdito
           <ToolbarBtn active={editor.isActive("code")} onClick={() => editor.chain().focus().toggleCode().run()} title="Inline code">
             <CodeIcon />
           </ToolbarBtn>
-          <Divider />
-          <ToolbarBtn
-            onClick={() => fileRef.current?.click()}
-            title={uploading ? "Uploading…" : "Insert image"}
-          >
-            {uploading ? <Spinner /> : <ImageIcon />}
-          </ToolbarBtn>
         </div>
       )}
-      <div onPaste={handlePaste} style={{ minHeight }}>
+      <div style={{ minHeight }}>
         <EditorContent editor={editor} className="rich-editor-content" />
       </div>
-      <input
-        ref={fileRef}
-        type="file"
-        accept="image/jpeg,image/png,image/gif,image/webp"
-        className="hidden"
-        onChange={(e) => {
-          const file = e.target.files?.[0];
-          if (file) void uploadAndInsert(file);
-          e.target.value = "";
-        }}
-      />
     </div>
   );
 });

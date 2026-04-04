@@ -1,10 +1,10 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
-import { Trash2 } from "lucide-react";
+import { MoreVertical, Trash2 } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/tickets/activity-timeline";
 import { AiBadge } from "@/components/tickets/ai-badge";
@@ -12,6 +12,7 @@ import { AiSuggestedReply } from "@/components/tickets/ai-suggested-reply";
 import { RichBody } from "@/components/tickets/rich-body";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { extractTicketId } from "@/lib/slug";
@@ -41,6 +42,25 @@ export default function AdminTicketDetailPage() {
   const [suggestedOverride, setSuggestedOverride] = useState<string | null>(null);
   const [assigneeId, setAssigneeId] = useState<string | null>(null);
   const [isGeneratingAiReply, setIsGeneratingAiReply] = useState(false);
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [confirmSoftDeleteOpen, setConfirmSoftDeleteOpen] = useState(false);
+  const [confirmHardDeleteOpen, setConfirmHardDeleteOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    function onClickOutside(event: MouseEvent) {
+      if (!actionsRef.current) return;
+      if (!actionsRef.current.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    }
+
+    if (actionsOpen) {
+      document.addEventListener("mousedown", onClickOutside);
+    }
+
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [actionsOpen]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -91,17 +111,24 @@ export default function AdminTicketDetailPage() {
   }
 
   async function softDeleteTicket() {
-    if (!confirm("Hide this ticket from customer view? Admin will still be able to track it.")) {
-      return;
-    }
     try {
       await api.delete(`/tickets/${id}`);
       toast.success("Ticket removed from customer view");
       await queryClient.invalidateQueries({ queryKey: ["admin-tickets"] });
       await queryClient.invalidateQueries({ queryKey: ["admin-ticket", id] });
-      router.push("/admin/tickets");
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to delete ticket"));
+    }
+  }
+
+  async function hardDeleteTicket() {
+    try {
+      await api.delete(`/tickets/${id}`, { params: { permanent: true } });
+      toast.success("Ticket permanently deleted");
+      await queryClient.invalidateQueries({ queryKey: ["admin-tickets"] });
+      router.push("/admin/tickets");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to permanently delete ticket"));
     }
   }
 
@@ -126,7 +153,46 @@ export default function AdminTicketDetailPage() {
       <div className="col-span-12 space-y-4 lg:col-span-8">
         <div className="rounded-xl border border-[var(--line)] bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">#{ticket.id.slice(0, 8).toUpperCase()}</p>
-          <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
+            <div ref={actionsRef} className="relative">
+              <button
+                type="button"
+                aria-label="Open ticket actions"
+                onClick={() => setActionsOpen((prev) => !prev)}
+                className="focus-ring inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--line)] bg-white text-[var(--ink)] hover:bg-[var(--paper)]"
+              >
+                <MoreVertical className="h-5 w-5" />
+              </button>
+
+              {actionsOpen && (
+                <div className="absolute right-0 z-20 mt-2 w-56 rounded-lg border border-[var(--line)] bg-white p-1 shadow-lg">
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-[var(--paper)]"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setConfirmSoftDeleteOpen(true);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Remove From Customer
+                  </button>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-rose-50"
+                    onClick={() => {
+                      setActionsOpen(false);
+                      setConfirmHardDeleteOpen(true);
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Permanently
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
           <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
           <div className="mt-3 flex flex-wrap gap-2">
             <AiBadge
@@ -156,12 +222,6 @@ export default function AdminTicketDetailPage() {
               Removed at {new Date(ticket.deleted_at).toLocaleString()} by {ticket.deleted_by?.full_name ?? "unknown"}
             </p>
           )}
-          <div className="mt-4">
-            <Button type="button" variant="secondary" onClick={softDeleteTicket}>
-              <Trash2 className="mr-1 h-4 w-4" />
-              Remove from customer
-            </Button>
-          </div>
         </div>
 
         <AiSuggestedReply
@@ -234,6 +294,56 @@ export default function AdminTicketDetailPage() {
       <div className="col-span-12 lg:col-span-4">
         <ActivityTimeline activities={ticket.activities ?? []} />
       </div>
+
+      <Modal
+        open={confirmSoftDeleteOpen}
+        title="Remove From Customer"
+        onClose={() => setConfirmSoftDeleteOpen(false)}
+      >
+        <p className="text-sm text-[var(--muted)]">
+          This hides the ticket from customer views, but keeps it available for admin tracking and audit.
+        </p>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={() => setConfirmSoftDeleteOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={async () => {
+              setConfirmSoftDeleteOpen(false);
+              await softDeleteTicket();
+            }}
+          >
+            Confirm Remove
+          </Button>
+        </div>
+      </Modal>
+
+      <Modal
+        open={confirmHardDeleteOpen}
+        title="Delete Ticket Permanently"
+        onClose={() => setConfirmHardDeleteOpen(false)}
+      >
+        <p className="text-sm text-[var(--muted)]">
+          This permanently deletes the ticket and its related data. This action cannot be undone.
+        </p>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={() => setConfirmHardDeleteOpen(false)}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={async () => {
+              setConfirmHardDeleteOpen(false);
+              await hardDeleteTicket();
+            }}
+          >
+            Delete Permanently
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }

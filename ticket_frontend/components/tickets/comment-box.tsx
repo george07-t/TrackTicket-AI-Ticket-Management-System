@@ -3,7 +3,17 @@
 import { FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
+import { RichImageUploader } from "@/components/ui/rich-image-uploader";
 import { RichEditor, RichEditorHandle } from "@/components/ui/rich-editor";
+import { getMediaUrl } from "@/lib/api";
+
+function appendImagesToHtml(html: string, images: string[]): string {
+  if (images.length === 0) return html;
+  const imageBlocks = images
+    .map((url) => `<p><img src="${getMediaUrl(url)}" alt="attachment" /></p>`)
+    .join("");
+  return `${html}${imageBlocks}`;
+}
 
 export function CommentBox({
   canInternal,
@@ -21,6 +31,7 @@ export function CommentBox({
   onSubmit: (body: string, isInternal: boolean) => Promise<void>;
 }) {
   const [body, setBody] = useState("");
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isInternal, setIsInternal] = useState(false);
   const editorRef = useRef<RichEditorHandle>(null);
 
@@ -46,8 +57,9 @@ export function CommentBox({
       return;
     }
 
-    await onSubmit(currentBody, isInternal);
+    await onSubmit(appendImagesToHtml(currentBody, attachments), isInternal);
     updateBody("");
+    setAttachments([]);
     editorRef.current?.clear();
     setIsInternal(false);
   }
@@ -59,10 +71,17 @@ export function CommentBox({
           ref={editorRef}
           content={currentBody}
           onChange={updateBody}
-          placeholder="Write a reply with formatting or image paste/upload."
+          placeholder="Write a reply with formatting."
           disabled={disabled}
           minHeight="8rem"
         />
+        <div className="mt-2">
+          <RichImageUploader
+            images={attachments}
+            onChange={setAttachments}
+            disabled={disabled}
+          />
+        </div>
       </div>
 
       <div className="flex items-center justify-between">

@@ -4,7 +4,17 @@ import { FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RichImageUploader } from "@/components/ui/rich-image-uploader";
 import { RichEditor, RichEditorHandle } from "@/components/ui/rich-editor";
+import { getMediaUrl } from "@/lib/api";
+
+function appendImagesToHtml(html: string, images: string[]): string {
+  if (images.length === 0) return html;
+  const imageBlocks = images
+    .map((url) => `<p><img src="${getMediaUrl(url)}" alt="attachment" /></p>`)
+    .join("");
+  return `${html}${imageBlocks}`;
+}
 
 export function TicketForm({
   onSubmit,
@@ -13,6 +23,7 @@ export function TicketForm({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const editorRef = useRef<RichEditorHandle>(null);
 
@@ -25,9 +36,11 @@ export function TicketForm({
         return;
       }
 
-      await onSubmit(title, description);
+      const payloadDescription = appendImagesToHtml(description, attachments);
+      await onSubmit(title, payloadDescription);
       setTitle("");
       setDescription("");
+      setAttachments([]);
       editorRef.current?.clear();
     } finally {
       setIsSubmitting(false);
@@ -53,9 +66,12 @@ export function TicketForm({
           ref={editorRef}
           content={description}
           onChange={setDescription}
-          placeholder="Describe your issue in detail. You can format text and paste images."
+          placeholder="Describe your issue in detail."
           minHeight="11rem"
         />
+        <div className="mt-2">
+          <RichImageUploader images={attachments} onChange={setAttachments} />
+        </div>
       </div>
 
       <Button type="submit" disabled={isSubmitting}>
