@@ -17,8 +17,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Create the uploads directory at module load time so StaticFiles can find it
-# immediately — before the first request arrives.
 UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -28,15 +26,14 @@ async def lifespan(app: FastAPI):
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
-        logger.info("✅ Database connection OK")
+        logger.info("Database connection OK")
     except Exception:
-        logger.exception("❌ Database connection FAILED on startup")
+        logger.exception("Database connection FAILED on startup")
 
     logger.info("%s is running", settings.app_name)
     yield
-    # ── shutdown ─────────────────────────────────────────────
     await engine.dispose()
-    logger.info("🛑 %s shutdown complete", settings.app_name)
+    logger.info("%s shutdown complete", settings.app_name)
 
 
 app = FastAPI(
@@ -54,7 +51,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# API routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
@@ -67,6 +63,4 @@ async def health() -> dict:
     return {"status": "ok", "app": settings.app_name}
 
 
-# Serve uploaded images — mounted last so /api routes take priority.
-# check_dir is True (default) because UPLOAD_DIR is created at module level above.
 app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")

@@ -7,7 +7,6 @@ from passlib.context import CryptContext
 
 from app.config import settings
 
-# Django-style default: PBKDF2-SHA256 avoids bcrypt's 72-byte input limit.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 
@@ -17,7 +16,6 @@ class AuthService:
         try:
             return pwd_context.verify(plain, hashed)
         except Exception:
-            # Invalid/corrupt hash or backend mismatch should not crash auth flow.
             return False
 
     @staticmethod

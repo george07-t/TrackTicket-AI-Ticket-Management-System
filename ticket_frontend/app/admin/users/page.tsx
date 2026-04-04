@@ -127,13 +127,11 @@ export default function AdminUsersPage() {
 
   return (
     <section className="space-y-5 fade-in">
-      {/* Header row with title and Create Agent button */}
       <div className="flex items-center justify-between">
         <h2 className="font-[var(--font-display)] text-2xl">User Management</h2>
         <Button onClick={() => setIsCreateModalOpen(true)}>+ Create Agent</Button>
       </div>
 
-      {/* Filters */}
       <div className="grid gap-3 rounded-xl border border-[var(--line)] bg-white p-4 md:grid-cols-2">
         <label className="text-sm">
           Role Filter
@@ -162,7 +160,6 @@ export default function AdminUsersPage() {
         </label>
       </div>
 
-      {/* Users Table */}
       {isLoading ? (
         <div className="rounded-xl border border-[var(--line)] bg-white p-4 space-y-3">
           {[...Array(5)].map((_, i) => (
@@ -248,7 +245,6 @@ export default function AdminUsersPage() {
         </Table>
       )}
 
-      {/* Create Agent Modal */}
       <Modal open={isCreateModalOpen} onClose={() => setIsCreateModalOpen(false)} title="Create New Agent">
         <form onSubmit={createAgent} className="space-y-4">
           <div className="grid gap-3 md:grid-cols-2">
@@ -286,7 +282,6 @@ export default function AdminUsersPage() {
         </form>
       </Modal>
 
-      {/* Delete Confirm Modal */}
       <Modal open={!!deleteTarget} onClose={() => setDeleteTarget(null)} title="Confirm Delete">
         <div className="space-y-4">
           <p>Delete <strong>{deleteTarget?.full_name}</strong>? This cannot be undone.</p>

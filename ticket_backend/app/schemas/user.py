@@ -16,6 +16,29 @@ def _validate_password(v: str) -> str:
     return v
 
 
+def _normalize_phone(v: str | None) -> str | None:
+    if v is None:
+        return v
+    digits = "".join(ch for ch in v if ch.isdigit())
+    if len(digits) < 7 or len(digits) > 15:
+        raise ValueError("Phone number must be 7 to 15 digits")
+    return digits
+
+
+def _normalize_tags(v: list[str] | None) -> list[str] | None:
+    if v is None:
+        return v
+    return [tag.strip().lower() for tag in v if tag.strip()][:10]
+
+
+def _validate_max_tickets(v: int | None) -> int | None:
+    if v is None:
+        return v
+    if v < 1 or v > 200:
+        raise ValueError("max_active_tickets must be between 1 and 200")
+    return v
+
+
 class UserRegister(BaseModel):
     email: EmailStr
     phone: str | None = None
@@ -48,12 +71,7 @@ class UserRegister(BaseModel):
     @field_validator("phone")
     @classmethod
     def normalize_phone(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        digits = "".join(ch for ch in v if ch.isdigit())
-        if len(digits) < 7 or len(digits) > 15:
-            raise ValueError("Phone number must be 7 to 15 digits")
-        return digits
+        return _normalize_phone(v)
 
 
 class UserLogin(BaseModel):
@@ -86,25 +104,17 @@ class UserCreateByAdmin(BaseModel):
     @field_validator("expertise_tags")
     @classmethod
     def normalize_admin_expertise_tags(cls, v: list[str]) -> list[str]:
-        normalized = [tag.strip().lower() for tag in v if tag.strip()]
-        return normalized[:10]
+        return _normalize_tags(v) or []
 
     @field_validator("max_active_tickets")
     @classmethod
     def validate_admin_max_active_tickets(cls, v: int) -> int:
-        if v < 1 or v > 200:
-            raise ValueError("max_active_tickets must be between 1 and 200")
-        return v
+        return _validate_max_tickets(v) or v
 
     @field_validator("phone")
     @classmethod
     def normalize_admin_phone(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        digits = "".join(ch for ch in v if ch.isdigit())
-        if len(digits) < 7 or len(digits) > 15:
-            raise ValueError("Phone number must be 7 to 15 digits")
-        return digits
+        return _normalize_phone(v)
 
 
 class UserUpdateByAdmin(BaseModel):
@@ -126,29 +136,17 @@ class UserUpdateByAdmin(BaseModel):
     @field_validator("expertise_tags")
     @classmethod
     def normalize_update_expertise_tags(cls, v: list[str] | None) -> list[str] | None:
-        if v is None:
-            return v
-        normalized = [tag.strip().lower() for tag in v if tag.strip()]
-        return normalized[:10]
+        return _normalize_tags(v)
 
     @field_validator("max_active_tickets")
     @classmethod
     def validate_update_max_active_tickets(cls, v: int | None) -> int | None:
-        if v is None:
-            return v
-        if v < 1 or v > 200:
-            raise ValueError("max_active_tickets must be between 1 and 200")
-        return v
+        return _validate_max_tickets(v)
 
     @field_validator("phone")
     @classmethod
     def normalize_update_phone(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        digits = "".join(ch for ch in v if ch.isdigit())
-        if len(digits) < 7 or len(digits) > 15:
-            raise ValueError("Phone number must be 7 to 15 digits")
-        return digits
+        return _normalize_phone(v)
 
 
 class UserProfileUpdate(BaseModel):
@@ -171,29 +169,17 @@ class UserProfileUpdate(BaseModel):
     @field_validator("expertise_tags")
     @classmethod
     def normalize_profile_expertise_tags(cls, v: list[str] | None) -> list[str] | None:
-        if v is None:
-            return v
-        normalized = [tag.strip().lower() for tag in v if tag.strip()]
-        return normalized[:10]
+        return _normalize_tags(v)
 
     @field_validator("max_active_tickets")
     @classmethod
     def validate_profile_max_active_tickets(cls, v: int | None) -> int | None:
-        if v is None:
-            return v
-        if v < 1 or v > 200:
-            raise ValueError("max_active_tickets must be between 1 and 200")
-        return v
+        return _validate_max_tickets(v)
 
     @field_validator("phone")
     @classmethod
     def normalize_profile_phone(cls, v: str | None) -> str | None:
-        if v is None:
-            return v
-        digits = "".join(ch for ch in v if ch.isdigit())
-        if len(digits) < 7 or len(digits) > 15:
-            raise ValueError("Phone number must be 7 to 15 digits")
-        return digits
+        return _normalize_phone(v)
 
 
 class ChangePasswordRequest(BaseModel):
@@ -208,25 +194,6 @@ class ChangePasswordRequest(BaseModel):
 
 class ForgotPasswordRequest(BaseModel):
     email: EmailStr
-
-
-class VerifyOtpRequest(BaseModel):
-    email: EmailStr
-    otp: str
-    new_password: str
-
-    @field_validator("otp")
-    @classmethod
-    def otp_format(cls, v: str) -> str:
-        v = v.strip()
-        if not v.isdigit() or len(v) != 6:
-            raise ValueError("OTP must be a 6-digit number")
-        return v
-
-    @field_validator("new_password")
-    @classmethod
-    def strong_password(cls, v: str) -> str:
-        return _validate_password(v)
 
 
 class VerifyResetOtpRequest(BaseModel):

@@ -1,21 +1,13 @@
-from datetime import timedelta
-
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import require_role
+from app.dependencies import is_agent_profile_complete, require_role
 from app.models.ticket import Ticket, TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User, UserRole
 
 router = APIRouter(prefix="/dashboard", tags=["dashboard"])
-
-
-def _is_agent_profile_complete(user: User) -> bool:
-    if user.role != UserRole.AGENT:
-        return True
-    return bool(user.expertise_tags) and user.max_active_tickets > 0
 
 
 @router.get("/stats")
@@ -23,7 +15,6 @@ async def stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_role(UserRole.ADMIN)),
 ) -> dict:
-    # Core counts
     total = await db.scalar(select(func.count(Ticket.id))) or 0
     open_count = await db.scalar(
         select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.OPEN)
@@ -38,17 +29,14 @@ async def stats(
         select(func.count(Ticket.id)).where(Ticket.status == TicketStatus.CLOSED)
     ) or 0
 
-    # Unassigned tickets
     unassigned = await db.scalar(
         select(func.count(Ticket.id)).where(Ticket.assigned_to.is_(None))
     ) or 0
 
-    # AI classified vs not yet
     ai_classified = await db.scalar(
         select(func.count(Ticket.id)).where(Ticket.ai_classified.is_(True))
     ) or 0
 
-    # Avg resolution time (seconds → hours)
     avg_secs = await db.scalar(
         select(
             func.avg(
@@ -76,7 +64,6 @@ async def stats(
     )
     avg_first_response_minutes = round((first_response_secs or 0) / 60, 2)
 
-    # By category
     cat_rows = await db.execute(
         select(Ticket.category, func.count(Ticket.id)).group_by(Ticket.category)
     )
@@ -85,7 +72,6 @@ async def stats(
         for c, cnt in cat_rows.all()
     }
 
-    # By priority
     pri_rows = await db.execute(
         select(Ticket.priority, func.count(Ticket.id)).group_by(Ticket.priority)
     )
@@ -132,7 +118,6 @@ async def stats(
         for category, avg_secs, resolved_count in resolution_by_category_rows.all()
     ]
 
-    # Agent workload
     agent_rows = await db.execute(
         select(User.full_name, func.count(Ticket.id).label("open_tickets"))
         .outerjoin(
@@ -147,7 +132,6 @@ async def stats(
         {"agent": name, "open_tickets": cnt} for name, cnt in agent_rows.all()
     ]
 
-    # User counts
     total_customers = await db.scalar(
         select(func.count(User.id)).where(User.role == UserRole.CUSTOMER)
     ) or 0
@@ -191,7 +175,7 @@ async def agent_stats(
     current_agent: User = Depends(require_role(UserRole.AGENT, UserRole.ADMIN)),
 ) -> dict:
     """Personal stats for the logged-in agent."""
-    if current_agent.role == UserRole.AGENT and not _is_agent_profile_complete(current_agent):
+    if current_agent.role == UserRole.AGENT and not is_agent_profile_complete(current_agent):
         return {
             "assigned_total": 0,
             "open": 0,
@@ -220,7 +204,7 @@ async def agent_stats(
         select(func.count(Ticket.id)).where(
             Ticket.assigned_to == agent_id,
             Ticket.status == TicketStatus.OPEN,
-            Ticket.priority == "critical",
+            Ticket.priority == TicketPriority.CRITICAL,
         )
     ) or 0
 

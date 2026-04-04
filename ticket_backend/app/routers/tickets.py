@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 
 from app.database import AsyncSessionLocal, get_db
 from app.config import settings
-from app.dependencies import get_current_user, require_role
+from app.dependencies import get_current_user, is_agent_profile_complete, require_role
 from app.models.comment import Comment
 from app.models.ticket import Ticket, TicketActivity, TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User, UserRole
@@ -23,26 +23,17 @@ router = APIRouter(prefix="/tickets", tags=["tickets"])
 logger = logging.getLogger(__name__)
 AI_ASSIGNMENT_CONFIDENCE_THRESHOLD = settings.ai_assignment_confidence_threshold
 
-# ─────────────────────────── helpers ────────────────────────────────────────
-
 
 def _can_access_ticket(user: User, ticket: Ticket) -> bool:
     if user.role == UserRole.ADMIN:
         return True
     if user.role == UserRole.CUSTOMER:
         return ticket.created_by == user.id
-    # Agent: must be assigned; None assigned → no access
     return ticket.assigned_to is not None and ticket.assigned_to == user.id
 
 
-def _is_agent_profile_complete(user: User) -> bool:
-    if user.role != UserRole.AGENT:
-        return True
-    return bool(user.expertise_tags) and user.max_active_tickets > 0
-
-
 def _ensure_agent_profile_complete(user: User) -> None:
-    if not _is_agent_profile_complete(user):
+    if not is_agent_profile_complete(user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Complete your agent profile (expertise and capacity) before accessing ticket workspace",
@@ -161,10 +152,6 @@ async def _log_activity(
             ticket_id=ticket_id, actor_id=actor_id, action=action, detail=detail
         )
     )
-    # caller is responsible for committing
-
-
-# ─────────────────────── background AI task ─────────────────────────────────
 
 
 async def _run_ai_classification(ticket_id: uuid.UUID, title: str, description: str) -> None:
@@ -183,16 +170,12 @@ async def _run_ai_classification(ticket_id: uuid.UUID, title: str, description: 
 
         ticket.category = result.category
         ticket.priority = result.priority
-        # Reply generation is user-triggered (manual) to avoid unnecessary regeneration noise.
-        if not ticket.ai_suggested_response:
-            ticket.ai_suggested_response = None
         ticket.ai_confidence_note = result.confidence_note
         ticket.ai_classified = True
 
         candidates = await _get_assignment_candidates(db)
-        default_agent_id = await _select_agent_id(db)
         assignment_method = "load_balance"
-        assigned_to = default_agent_id
+        assigned_to = uuid.UUID(candidates[0]["id"]) if candidates else None
 
         if candidates:
             suggestion = await ai.suggest_agent(
@@ -250,7 +233,6 @@ async def _run_ai_classification(ticket_id: uuid.UUID, title: str, description: 
             ),
         )
 
-        # Capture the final agent ID before commit so we can email them after.
         final_assigned_to_id = ticket.assigned_to
 
         try:
@@ -260,9 +242,6 @@ async def _run_ai_classification(ticket_id: uuid.UUID, title: str, description: 
             await db.rollback()
             return
 
-        # Send assignment email to the FINAL agent (after AI has decided).
-        # This avoids notifying the wrong agent when AI reassigns away from
-        # the initial load-balance pick.
         if final_assigned_to_id:
             try:
                 final_agent = await db.get(User, final_assigned_to_id)
@@ -277,9 +256,6 @@ async def _run_ai_classification(ticket_id: uuid.UUID, title: str, description: 
                 logger.exception(
                     "Failed to send assignment email for ticket %s", ticket_id
                 )
-
-
-# ─────────────────────────── routes ─────────────────────────────────────────
 
 
 @router.post("/", response_model=TicketOut, status_code=status.HTTP_201_CREATED)
@@ -299,7 +275,7 @@ async def create_ticket(
         assignment_method="load_balance",
     )
     db.add(ticket)
-    await db.flush()  # get ticket.id before commit
+    await db.flush()
 
     await _log_activity(
         db,
@@ -311,8 +287,6 @@ async def create_ticket(
     await db.commit()
     await db.refresh(ticket)
 
-    # Do NOT email the agent here — the AI background task may reassign to
-    # a different agent. We send one definitive email after AI decides.
     background_tasks.add_task(
         _run_ai_classification, ticket.id, ticket.title, ticket.description
     )
@@ -336,15 +310,12 @@ async def list_tickets(
         .order_by(Ticket.created_at.desc())
     )
 
-    # Role-based filtering
     if current_user.role == UserRole.CUSTOMER:
         stmt = stmt.where(Ticket.created_by == current_user.id)
     elif current_user.role == UserRole.AGENT:
         _ensure_agent_profile_complete(current_user)
         stmt = stmt.where(Ticket.assigned_to == current_user.id)
-    # Admin sees all
 
-    # Optional filters
     if status_filter:
         stmt = stmt.where(Ticket.status == status_filter)
     if category:
@@ -352,7 +323,6 @@ async def list_tickets(
     if priority:
         stmt = stmt.where(Ticket.priority == priority)
 
-    # Pagination
     stmt = stmt.offset((page - 1) * page_size).limit(page_size)
 
     result = await db.execute(stmt)
@@ -399,15 +369,13 @@ async def update_ticket(
         old_status = ticket.status
         ticket.status = payload.status
 
-        # Set resolved_at timestamp when resolved
         if payload.status == TicketStatus.RESOLVED:
             ticket.resolved_at = datetime.now(timezone.utc)
         elif old_status == TicketStatus.RESOLVED:
-            ticket.resolved_at = None  # reopened
+            ticket.resolved_at = None
 
         changes.append(f"Status: {old_status} → {payload.status}")
 
-        # Email customer on status change
         result = await db.execute(select(User).where(User.id == ticket.created_by))
         customer = result.scalar_one_or_none()
         if customer:
@@ -536,7 +504,7 @@ async def generate_ai_reply(
         db,
         ticket_id=ticket.id,
         action=action,
-        detail=f"AI reply {'regenerated' if payload.force else 'generated'} by {current_user.full_name}",
+        detail=f"AI reply {action.replace('ai_reply_', '')} by {current_user.full_name}",
         actor_id=current_user.id,
     )
     await db.commit()
@@ -554,9 +522,6 @@ async def delete_ticket(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     await db.delete(ticket)
     await db.commit()
-
-
-# ─────────────────────────── comments ───────────────────────────────────────
 
 
 @router.post("/{ticket_id}/comments", response_model=CommentOut, status_code=status.HTTP_201_CREATED)
@@ -580,7 +545,6 @@ async def add_comment(
             detail="Customers cannot create internal notes",
         )
 
-    # Customers cannot comment on closed tickets
     if current_user.role == UserRole.CUSTOMER and ticket.status == TicketStatus.CLOSED:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -640,7 +604,6 @@ async def list_comments(
         .order_by(Comment.created_at.asc())
     )
 
-    # Customers cannot see internal notes
     if current_user.role == UserRole.CUSTOMER:
         stmt = stmt.where(Comment.is_internal.is_(False))
 

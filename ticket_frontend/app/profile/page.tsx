@@ -111,7 +111,7 @@ export default function ProfilePage() {
         const response = await api.get<User>("/auth/me");
         setProfile(response.data);
         setFullName(response.data.full_name);
-        setPhone((response.data.phone ?? "") as PhoneValue);
+        setPhone(response.data.phone as PhoneValue | undefined);
         setExpertiseTags((response.data.expertise_tags ?? []).join(", "));
         setMaxActiveTickets(String(response.data.max_active_tickets ?? 10));
         setIsAvailable(response.data.is_available ?? true);
@@ -186,7 +186,6 @@ export default function ProfilePage() {
       <section className="fade-in space-y-6">
         <h2 className="font-[var(--font-display)] text-2xl font-bold">My Profile</h2>
 
-        {/* Profile overview card — full width */}
         <div className="rounded-xl border border-[var(--line)] bg-white p-6 shadow-sm">
           {isLoading ? (
             <div className="space-y-4">
@@ -210,7 +209,6 @@ export default function ProfilePage() {
             </div>
           ) : profile ? (
             <div className="space-y-5">
-              {/* Avatar + name */}
               <div className="flex flex-wrap items-center gap-4">
                 <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-full bg-[var(--brand)] text-xl font-bold text-white shadow">
                   {initials}
@@ -222,7 +220,6 @@ export default function ProfilePage() {
                 <RoleBadge role={profile.role} />
               </div>
               <hr className="border-[var(--line)]" />
-              {/* Info grid */}
               <div className="grid grid-cols-2 gap-x-6 gap-y-4 sm:grid-cols-3 lg:grid-cols-4">
                 <InfoRow label="Phone" value={profile.phone ?? "Not set"} />
                 <InfoRow
@@ -245,10 +242,7 @@ export default function ProfilePage() {
           ) : null}
         </div>
 
-        {/* Two-column layout for forms on large screens */}
         <div className="grid gap-6 lg:grid-cols-2">
-
-          {/* Edit Profile form */}
           <form onSubmit={updateProfile} className="rounded-xl border border-[var(--line)] bg-white p-6 shadow-sm space-y-4">
             <div>
               <h3 className="text-lg font-semibold text-[var(--ink)]">Edit Profile</h3>
@@ -311,7 +305,6 @@ export default function ProfilePage() {
             </div>
           </form>
 
-          {/* Change Password form */}
           <form onSubmit={changePassword} className="rounded-xl border border-[var(--line)] bg-white p-6 shadow-sm space-y-4">
             <div>
               <h3 className="text-lg font-semibold text-[var(--ink)]">Change Password</h3>

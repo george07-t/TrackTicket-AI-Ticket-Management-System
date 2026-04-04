@@ -46,6 +46,12 @@ async def get_current_user(
     return user
 
 
+def is_agent_profile_complete(user: User) -> bool:
+    if user.role != UserRole.AGENT:
+        return True
+    return bool(user.expertise_tags) and user.max_active_tickets > 0
+
+
 def require_role(*allowed_roles: UserRole) -> Callable:
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role not in allowed_roles:

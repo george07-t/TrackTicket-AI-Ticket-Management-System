@@ -11,8 +11,6 @@ import { attachmentName } from "@/lib/slug";
 const MAX_IMAGES = 5;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-// ── small inline components ──────────────────────────────────────────────────
-
 function ImageIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -31,8 +29,6 @@ function Spinner() {
   );
 }
 
-// ── main component ───────────────────────────────────────────────────────────
-
 export function TicketForm({
   onSubmit,
 }: {
@@ -40,12 +36,10 @@ export function TicketForm({
 }) {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [attachments, setAttachments] = useState<string[]>([]); // backend /uploads paths
+  const [attachments, setAttachments] = useState<string[]>([]);
   const [uploading, setUploading] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
-
-  // ── upload helpers ─────────────────────────────────────────────────────────
 
   async function uploadFile(file: File) {
     if (!ALLOWED_TYPES.has(file.type)) {
@@ -69,26 +63,20 @@ export function TicketForm({
     }
   }
 
-  // Intercept paste: if the clipboard contains an image blob, upload it
-  // instead of letting the textarea receive raw binary text.
   function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
     const imageItem = Array.from(e.clipboardData.items).find((item) =>
       item.type.startsWith("image/")
     );
-    if (!imageItem) return; // plain text — let the textarea handle it normally
+    if (!imageItem) return;
     e.preventDefault();
     const file = imageItem.getAsFile();
     if (file) void uploadFile(file);
   }
 
-  // ── form submit ────────────────────────────────────────────────────────────
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      // Append image refs as markdown at the end of the description so they
-      // travel with the ticket body and are rendered by RichBody on display.
       const fullDescription =
         attachments.length > 0
           ? `${description}\n\n${attachments.map((u) => `![image](${u})`).join("\n")}`
@@ -101,8 +89,6 @@ export function TicketForm({
       setIsSubmitting(false);
     }
   }
-
-  // ── render ─────────────────────────────────────────────────────────────────
 
   return (
     <form onSubmit={submit} className="space-y-4 rounded-xl border border-[var(--line)] bg-white p-5">
@@ -119,8 +105,6 @@ export function TicketForm({
 
       <div>
         <label className="mb-1 block text-sm font-medium">Description</label>
-
-        {/* Wrapper gives us a stacking context for the absolute upload button */}
         <div className="relative">
           <TextArea
             value={description}
@@ -130,11 +114,9 @@ export function TicketForm({
             required
             rows={5}
             minLength={10}
-            // Extra bottom padding so text never hides behind the upload icon
             className="pb-9"
           />
 
-          {/* Camera icon — sits at the bottom-right inside the textarea */}
           <button
             type="button"
             title={
@@ -149,7 +131,6 @@ export function TicketForm({
             {uploading ? <Spinner /> : <ImageIcon />}
           </button>
 
-          {/* Hidden file input */}
           <input
             ref={fileRef}
             type="file"
@@ -158,12 +139,11 @@ export function TicketForm({
             onChange={(e) => {
               const file = e.target.files?.[0];
               if (file) void uploadFile(file);
-              e.target.value = ""; // allow re-selecting the same file
+              e.target.value = "";
             }}
           />
         </div>
 
-        {/* Attachment thumbnails */}
         {attachments.length > 0 && (
           <div className="mt-2 flex flex-wrap gap-2">
             {attachments.map((url, i) => (
@@ -173,7 +153,6 @@ export function TicketForm({
                   alt={attachmentName(url)}
                   className="h-20 w-20 rounded-lg border border-[var(--line)] object-cover"
                 />
-                {/* Remove button shown on hover */}
                 <button
                   type="button"
                   onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}

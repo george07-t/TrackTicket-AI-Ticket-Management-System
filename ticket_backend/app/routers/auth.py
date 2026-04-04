@@ -21,7 +21,6 @@ from app.schemas.user import (
     UserRegister,
     VerifyEmailOtpRequest,
     VerifyResetOtpRequest,
-    VerifyOtpRequest,
 )
 from app.services.auth_service import AuthService
 from app.services.email_service import send_otp_email
@@ -29,7 +28,6 @@ from app.services.email_service import send_otp_email
 router = APIRouter(prefix="/auth", tags=["auth"])
 logger = logging.getLogger(__name__)
 
-# Max failed OTP attempts before lockout
 MAX_OTP_ATTEMPTS = 5
 MAX_EMAIL_OTP_ATTEMPTS = 5
 
@@ -81,8 +79,8 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> Token
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
     user = result.scalar_one_or_none()
 
-    # Always do the hash check to prevent timing attacks
-    dummy_hash = "$2b$12$KIXnRe/FakeHashToPreventTimingAttacks.aaaaaaaaaaaaaaaaaa"
+    # Run password verification regardless of whether the user exists to prevent timing attacks.
+    dummy_hash = AuthService.hash_password("__dummy_timing_prevention__")
     candidate_hash = user.hashed_password if user else dummy_hash
 
     if not AuthService.verify_password(payload.password, candidate_hash) or not user:
@@ -102,7 +100,6 @@ async def login(payload: UserLogin, db: AsyncSession = Depends(get_db)) -> Token
             detail="Email not verified. Please verify your email OTP first.",
         )
 
-    # Update last login
     user.last_login_at = datetime.now(timezone.utc)
     await db.commit()
     await db.refresh(user)
@@ -157,7 +154,7 @@ async def forgot_password(
     result = await db.execute(select(User).where(User.email == payload.email.lower()))
     user = result.scalar_one_or_none()
 
-    # Always return success — don't leak whether email exists
+    # Always return the same message to avoid leaking whether an email exists.
     if not user or not user.is_active:
         return {"message": "If that email exists, an OTP has been sent."}
 
@@ -241,56 +238,6 @@ async def verify_email_otp(
     user.email_otp_attempts = 0
     await db.commit()
     return {"message": "Email verified successfully"}
-
-
-@router.post("/verify-otp", status_code=status.HTTP_200_OK)
-async def verify_otp_and_reset(
-    payload: VerifyOtpRequest, db: AsyncSession = Depends(get_db)
-) -> dict:
-    result = await db.execute(select(User).where(User.email == payload.email.lower()))
-    user = result.scalar_one_or_none()
-
-    if not user or not user.otp_code:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired OTP"
-        )
-
-    # Lockout after too many attempts
-    if user.otp_attempts >= MAX_OTP_ATTEMPTS:
-        user.otp_code = None
-        user.otp_expires_at = None
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail="Too many failed attempts. Request a new OTP.",
-        )
-
-    now = datetime.now(timezone.utc)
-    if not user.otp_expires_at or user.otp_expires_at < now:
-        user.otp_code = None
-        await db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired"
-        )
-
-    if user.otp_code != payload.otp:
-        user.otp_attempts += 1
-        await db.commit()
-        remaining = MAX_OTP_ATTEMPTS - user.otp_attempts
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid OTP. {remaining} attempt(s) remaining.",
-        )
-
-    # Valid OTP — reset password and clear OTP
-    user.hashed_password = AuthService.hash_password(payload.new_password)
-    user.otp_code = None
-    user.otp_expires_at = None
-    user.otp_attempts = 0
-    await db.commit()
-
-    logger.info("Password reset successful for %s", user.email)
-    return {"message": "Password reset successful. You can now log in."}
 
 
 @router.post("/verify-reset-otp", status_code=status.HTTP_200_OK)

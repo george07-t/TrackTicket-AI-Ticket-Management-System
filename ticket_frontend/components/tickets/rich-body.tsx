@@ -4,7 +4,6 @@ import { useMemo } from "react";
 import { getMediaUrl } from "@/lib/api";
 import { attachmentName } from "@/lib/slug";
 
-// Matches markdown image syntax:  ![alt text](url)
 const IMG_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
 
 function parseBody(text: string): { prose: string; images: string[] } {
@@ -18,11 +17,6 @@ function parseBody(text: string): { prose: string; images: string[] } {
   return { prose, images };
 }
 
-/**
- * Renders a ticket description or comment body.
- * Plain text is shown as-is; any embedded `![image](url)` markdown refs
- * are extracted and displayed as clickable image thumbnails below the text.
- */
 export function RichBody({ text, className = "" }: { text: string; className?: string }) {
   const { prose, images } = useMemo(() => parseBody(text), [text]);
 

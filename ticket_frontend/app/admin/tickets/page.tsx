@@ -70,6 +70,13 @@ export default function AdminTicketsPage() {
       </div>
 
       <Table headers={["Title", "Category", "Priority", "Assignee"]}>
+        {data.length === 0 && (
+          <tr>
+            <td colSpan={4} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
+              No tickets found.
+            </td>
+          </tr>
+        )}
         {data.map((ticket) => (
           <tr key={ticket.id} className="border-t border-[var(--line)]">
             <td className="px-4 py-3">

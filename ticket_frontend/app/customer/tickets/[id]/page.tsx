@@ -25,18 +25,14 @@ export default function CustomerTicketDetailPage() {
   const id = extractTicketId(params.id);
   const queryClient = useQueryClient();
 
-  // Refs hold the *previous* snapshot so we can detect the exact moment
-  // each field transitions and fire a one-shot toast.
-  // Initialised to null = "not yet seen any data" (first render guard).
+  // Refs track previous values to fire one-shot toasts on state transitions.
   const prevAiClassified = useRef<boolean | null>(null);
-  // undefined = not yet initialised; string | null after first render.
   const prevAssignedTo = useRef<string | null | undefined>(undefined);
 
   const { data: ticket } = useQuery<Ticket>({
     queryKey: ["ticket", id],
     queryFn: async () => (await api.get<Ticket>(`/tickets/${id}`)).data,
 
-    // Poll only while AI classification is still pending.
     refetchInterval: (query) => {
       const data = query.state.data;
       if (!data) return POLL_INTERVAL_MS;
@@ -49,18 +45,15 @@ export default function CustomerTicketDetailPage() {
     refetchOnWindowFocus: false,
   });
 
-  // Detect state transitions and fire toasts exactly once each.
   useEffect(() => {
     if (!ticket) return;
 
-    // ── First render: snapshot current state, nothing to notify yet ──────────
     if (prevAiClassified.current === null) {
       prevAiClassified.current = ticket.ai_classified;
       prevAssignedTo.current = ticket.assigned_to;
       return;
     }
 
-    // ── Classification just completed (false → true) ──────────────────────
     if (!prevAiClassified.current && ticket.ai_classified) {
       const category = ticket.category ?? "general";
       const priority = ticket.priority ?? "medium";
@@ -68,7 +61,6 @@ export default function CustomerTicketDetailPage() {
       prevAiClassified.current = true;
     }
 
-    // ── Assignment changed ────────────────────────────────────────────────────
     if (
       prevAssignedTo.current !== ticket.assigned_to &&
       ticket.assigned_to !== null &&
@@ -95,7 +87,6 @@ export default function CustomerTicketDetailPage() {
     }
   }
 
-  // ── Loading skeleton ────────────────────────────────────────────────────────
   if (!ticket) {
     return (
       <div className="grid grid-cols-12 gap-4">
@@ -116,10 +107,7 @@ export default function CustomerTicketDetailPage() {
 
   return (
     <div className="grid grid-cols-12 gap-4 fade-in">
-      {/* ── Left column: ticket details + comments ── */}
       <div className="col-span-12 space-y-4 lg:col-span-8">
-
-        {/* Real-time processing banner */}
         {!ticket.ai_classified && (
           <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
             <span className="relative flex h-3 w-3 shrink-0">
@@ -132,7 +120,6 @@ export default function CustomerTicketDetailPage() {
           </div>
         )}
 
-        {/* Ticket card */}
         <div className="rounded-xl border border-[var(--line)] bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">{ticketRef}</p>
           <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
@@ -159,7 +146,6 @@ export default function CustomerTicketDetailPage() {
           </div>
         </div>
 
-        {/* Comment box */}
         <CommentBox
           canInternal={false}
           onSubmit={(body) => addComment(body)}
@@ -169,7 +155,6 @@ export default function CustomerTicketDetailPage() {
           }
         />
 
-        {/* Comments list */}
         <div className="space-y-3">
           {comments.map((comment) => (
             <article
@@ -183,7 +168,6 @@ export default function CustomerTicketDetailPage() {
         </div>
       </div>
 
-      {/* ── Right column: activity log ── */}
       <div className="col-span-12 lg:col-span-4">
         <ActivityTimeline activities={ticket.activities ?? []} />
       </div>

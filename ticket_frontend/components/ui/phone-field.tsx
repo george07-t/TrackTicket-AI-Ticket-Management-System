@@ -11,7 +11,6 @@ import PhoneInput from "react-phone-number-input";
 import type { Country, Value as PhoneValue } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 
-// ── Types from the package's countrySelectComponent contract ─────────────────
 type FlagProps = {
   country: Country;
   countryName: string;
@@ -39,7 +38,6 @@ type CountrySelectProps = {
   name?: string;
 };
 
-// ── Searchable country select ────────────────────────────────────────────────
 function SearchableCountrySelect({
   value,
   onChange,
@@ -63,7 +61,6 @@ function SearchableCountrySelect({
 
   const selected = realOptions.find((o) => o.value === value);
 
-  // Close on outside click
   useEffect(() => {
     function onMouseDown(e: MouseEvent) {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -75,7 +72,6 @@ function SearchableCountrySelect({
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
-  // Focus search input when dropdown opens
   useEffect(() => {
     if (open) {
       setTimeout(() => searchRef.current?.focus(), 0);
@@ -108,7 +104,6 @@ function SearchableCountrySelect({
 
   return (
     <div ref={containerRef} className="relative flex-shrink-0">
-      {/* Trigger button showing current flag */}
       <button
         type="button"
         disabled={disabled}
@@ -125,10 +120,8 @@ function SearchableCountrySelect({
         <ChevronIcon open={open} />
       </button>
 
-      {/* Dropdown */}
       {open && (
-        <div className="absolute left-0 top-full z-50 mt-1 w-64 overflow-hidden rounded-xl border border-[var(--line)] bg-white shadow-lg">
-          {/* Search input */}
+        <div className="absolute left-0 top-full z-50 mt-1 w-56 max-w-[calc(100vw-2rem)] overflow-hidden rounded-xl border border-[var(--line)] bg-white shadow-lg sm:w-64">
           <div className="border-b border-[var(--line)] p-2">
             <div className="flex items-center gap-2 rounded-md border border-[var(--line)] px-2 py-1.5 focus-within:border-[var(--brand)] focus-within:ring-2 focus-within:ring-[var(--brand-soft)]">
               <SearchIcon />
@@ -139,6 +132,7 @@ function SearchableCountrySelect({
                 onChange={(e) => setSearch(e.target.value)}
                 onKeyDown={handleSearchKey}
                 placeholder="Search country..."
+                aria-label="Search country"
                 className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-slate-400"
               />
               {search && (
@@ -153,11 +147,7 @@ function SearchableCountrySelect({
             </div>
           </div>
 
-          {/* Options list */}
-          <ul
-            role="listbox"
-            className="max-h-52 overflow-y-auto py-1"
-          >
+          <ul role="listbox" className="max-h-52 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <li className="px-3 py-2 text-sm text-[var(--muted)]">No countries found</li>
             ) : (
@@ -190,7 +180,6 @@ function SearchableCountrySelect({
   );
 }
 
-// ── Icon helpers ─────────────────────────────────────────────────────────────
 function GlobeIcon() {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-6 text-[var(--muted)]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -223,7 +212,6 @@ function ClearIcon() {
   );
 }
 
-// ── Public PhoneField component ───────────────────────────────────────────────
 export function PhoneField({
   value,
   onChange,

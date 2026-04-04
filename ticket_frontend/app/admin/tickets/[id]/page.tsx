@@ -106,7 +106,6 @@ export default function AdminTicketDetailPage() {
 
   return (
     <div className="grid grid-cols-12 gap-4 fade-in">
-      {/* ── Left column: ticket details + controls ── */}
       <div className="col-span-12 space-y-4 lg:col-span-8">
         <div className="rounded-xl border border-[var(--line)] bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">#{ticket.id.slice(0, 8).toUpperCase()}</p>
@@ -199,7 +198,6 @@ export default function AdminTicketDetailPage() {
         </form>
       </div>
 
-      {/* ── Right column: activity log ── */}
       <div className="col-span-12 lg:col-span-4">
         <ActivityTimeline activities={ticket.activities ?? []} />
       </div>

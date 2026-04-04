@@ -60,8 +60,6 @@ export function CommentBox({
     }
   }
 
-  // ── upload helpers ────────────────────────────────���────────────────────────
-
   async function uploadFile(file: File) {
     if (!ALLOWED_TYPES.has(file.type)) {
       toast.error("Only image files are allowed (jpeg, png, gif, webp).");
@@ -94,8 +92,6 @@ export function CommentBox({
     if (file) void uploadFile(file);
   }
 
-  // ── form submit ──────────────────────────────────────────���─────────────────
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (disabled) return;
@@ -111,11 +107,8 @@ export function CommentBox({
     setAttachments([]);
   }
 
-  // ── render ──────────────────────────────────────────────────────��──────────
-
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-[var(--line)] bg-white p-4">
-      {/* Textarea with upload icon pinned to bottom-right */}
       <div className="relative">
         <TextArea
           value={currentBody}
@@ -157,7 +150,6 @@ export function CommentBox({
         />
       </div>
 
-      {/* Attachment thumbnails */}
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {attachments.map((url, i) => (
@@ -180,7 +172,6 @@ export function CommentBox({
         </div>
       )}
 
-      {/* Footer row */}
       <div className="flex items-center justify-between">
         {canInternal ? (
           <label className="flex items-center gap-2 text-sm text-[var(--muted)]">
@@ -195,7 +186,7 @@ export function CommentBox({
         ) : (
           <span className="text-sm text-[var(--muted)]">{disabledMessage ?? "Visible to customer"}</span>
         )}
-        <Button type="submit" disabled={disabled || uploading || !currentBody.trim() && attachments.length === 0}>
+        <Button type="submit" disabled={disabled || uploading || (!currentBody.trim() && attachments.length === 0)}>
           Send
         </Button>
       </div>
