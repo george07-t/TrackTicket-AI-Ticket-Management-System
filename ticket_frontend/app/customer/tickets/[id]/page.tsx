@@ -13,6 +13,7 @@ import { CommentBox } from "@/components/tickets/comment-box";
 import { RichBody } from "@/components/tickets/rich-body";
 import { StatusBadge } from "@/components/tickets/status-badge";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { extractTicketId } from "@/lib/slug";
 import { Comment, Ticket } from "@/lib/types";
 
 // Poll every 2.5 s while AI is processing; give up after 60 s if AI never responds.
@@ -20,7 +21,8 @@ const POLL_INTERVAL_MS = 2_500;
 const AI_POLL_TIMEOUT_MS = 60_000;
 
 export default function CustomerTicketDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = extractTicketId(params.id);
   const queryClient = useQueryClient();
 
   // Refs hold the *previous* snapshot so we can detect the exact moment
@@ -35,18 +37,15 @@ export default function CustomerTicketDetailPage() {
     queryFn: async () => (await api.get<Ticket>(`/tickets/${id}`)).data,
 
     // Poll only while AI classification is still pending.
-    // Classification and assignment are committed together by the background
-    // task, so ai_classified = true means the assignment is also finalised.
     refetchInterval: (query) => {
       const data = query.state.data;
-      if (!data) return POLL_INTERVAL_MS;           // keep polling until first load
-      if (data.ai_classified) return false;         // done — stop polling
+      if (!data) return POLL_INTERVAL_MS;
+      if (data.ai_classified) return false;
       const ageMs = Date.now() - new Date(data.created_at).getTime();
-      if (ageMs > AI_POLL_TIMEOUT_MS) return false; // safety cutoff — AI may have failed
+      if (ageMs > AI_POLL_TIMEOUT_MS) return false;
       return POLL_INTERVAL_MS;
     },
 
-    // Window-focus refetch is irrelevant while the interval is active.
     refetchOnWindowFocus: false,
   });
 
@@ -69,9 +68,7 @@ export default function CustomerTicketDetailPage() {
       prevAiClassified.current = true;
     }
 
-    // ── Assignment changed (null → agent, or AI reassigned to different agent)
-    // We compare by value, not by truthiness, to catch the load-balance → AI
-    // reassignment case where both old and new values are non-null strings.
+    // ── Assignment changed ────────────────────────────────────────────────────
     if (
       prevAssignedTo.current !== ticket.assigned_to &&
       ticket.assigned_to !== null &&
@@ -79,7 +76,6 @@ export default function CustomerTicketDetailPage() {
     ) {
       toast.success(`Assigned to ${ticket.assignee.full_name}`, { autoClose: 6000 });
     }
-    // Always update the snapshot, even if no toast fired (e.g. unassigned).
     prevAssignedTo.current = ticket.assigned_to;
   }, [ticket]);
 
@@ -102,10 +98,15 @@ export default function CustomerTicketDetailPage() {
   // ── Loading skeleton ────────────────────────────────────────────────────────
   if (!ticket) {
     return (
-      <div className="space-y-3">
-        <Skeleton height={130} borderRadius={12} />
-        <Skeleton height={96} borderRadius={12} />
-        <Skeleton height={80} borderRadius={12} />
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-12 space-y-3 lg:col-span-8">
+          <Skeleton height={130} borderRadius={12} />
+          <Skeleton height={96} borderRadius={12} />
+          <Skeleton height={80} borderRadius={12} />
+        </div>
+        <div className="col-span-12 lg:col-span-4">
+          <Skeleton height={200} borderRadius={12} />
+        </div>
       </div>
     );
   }
@@ -114,79 +115,78 @@ export default function CustomerTicketDetailPage() {
   const isClosed = ticket.status === "closed";
 
   return (
-    <section className="space-y-4 fade-in">
+    <div className="grid grid-cols-12 gap-4 fade-in">
+      {/* ── Left column: ticket details + comments ── */}
+      <div className="col-span-12 space-y-4 lg:col-span-8">
 
-      {/* ── Real-time processing banner ─────────────────────────────────────
-          Visible only while ai_classified = false. Disappears the moment
-          the background task commits (caught by the next 2.5 s poll).      */}
-      {!ticket.ai_classified && (
-        <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
-          <span className="relative flex h-3 w-3 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
-            <span className="relative inline-flex h-3 w-3 rounded-full bg-indigo-500" />
-          </span>
-          <p className="text-sm font-medium text-indigo-800">
-            AI is analyzing your ticket — category, priority and agent assignment will update in a moment…
-          </p>
-        </div>
-      )}
-
-      {/* ── Ticket card ─────────────────────────────────────────────────────── */}
-      <div className="rounded-xl border border-[var(--line)] bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">{ticketRef}</p>
-        <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
-        <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
-        {ticket.resolved_at ? (
-          <p className="mt-2 text-sm text-emerald-700">
-            Resolved at {new Date(ticket.resolved_at).toLocaleString()}
-          </p>
-        ) : null}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          <StatusBadge status={ticket.status} />
-          {/* AiBadge shows "Classifying…" while ai_classified = false, then the
-              real category + priority badges once the poll updates the data.  */}
-          <AiBadge
-            category={ticket.category}
-            priority={ticket.priority}
-            aiClassified={ticket.ai_classified}
-            aiConfidenceNote={ticket.ai_confidence_note}
-          />
-          {ticket.assignee && (
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              {ticket.assignee.full_name}
+        {/* Real-time processing banner */}
+        {!ticket.ai_classified && (
+          <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+            <span className="relative flex h-3 w-3 shrink-0">
+              <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+              <span className="relative inline-flex h-3 w-3 rounded-full bg-indigo-500" />
             </span>
-          )}
+            <p className="text-sm font-medium text-indigo-800">
+              AI is analyzing your ticket — category, priority and agent assignment will update in a moment…
+            </p>
+          </div>
+        )}
+
+        {/* Ticket card */}
+        <div className="rounded-xl border border-[var(--line)] bg-white p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">{ticketRef}</p>
+          <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
+          <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
+          {ticket.resolved_at ? (
+            <p className="mt-2 text-sm text-emerald-700">
+              Resolved at {new Date(ticket.resolved_at).toLocaleString()}
+            </p>
+          ) : null}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <StatusBadge status={ticket.status} />
+            <AiBadge
+              category={ticket.category}
+              priority={ticket.priority}
+              aiClassified={ticket.ai_classified}
+              aiConfidenceNote={ticket.ai_confidence_note}
+            />
+            {ticket.assignee && (
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                {ticket.assignee.full_name}
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Comment box */}
+        <CommentBox
+          canInternal={false}
+          onSubmit={(body) => addComment(body)}
+          disabled={isClosed}
+          disabledMessage={
+            isClosed ? "Comments are closed for closed tickets" : "Visible to customer"
+          }
+        />
+
+        {/* Comments list */}
+        <div className="space-y-3">
+          {comments.map((comment) => (
+            <article
+              key={comment.id}
+              className="rounded-xl border border-[var(--line)] bg-white p-4"
+            >
+              <p className="text-sm text-[var(--muted)]">{comment.author.full_name}</p>
+              <RichBody text={comment.body} className="mt-1" />
+            </article>
+          ))}
         </div>
       </div>
 
-      {/* ── Comment box ─────────────────────────────────────────────────────── */}
-      <CommentBox
-        canInternal={false}
-        onSubmit={(body) => addComment(body)}
-        disabled={isClosed}
-        disabledMessage={
-          isClosed ? "Comments are closed for closed tickets" : "Visible to customer"
-        }
-      />
-
-      {/* ── Comments list ───────────────────────────────────────────────────── */}
-      <div className="space-y-3">
-        {comments.map((comment) => (
-          <article
-            key={comment.id}
-            className="rounded-xl border border-[var(--line)] bg-white p-4"
-          >
-            <p className="text-sm text-[var(--muted)]">{comment.author.full_name}</p>
-            <RichBody text={comment.body} className="mt-1" />
-          </article>
-        ))}
+      {/* ── Right column: activity log ── */}
+      <div className="col-span-12 lg:col-span-4">
+        <ActivityTimeline activities={ticket.activities ?? []} />
       </div>
-
-      {/* ── Activity timeline ────────────────────────────────────────────────
-          Activities are part of the ticket response, so they refresh
-          automatically on every poll — no separate query needed.             */}
-      <ActivityTimeline activities={ticket.activities ?? []} />
-    </section>
+    </div>
   );
 }

@@ -12,12 +12,14 @@ import { RichBody } from "@/components/tickets/rich-body";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { extractTicketId } from "@/lib/slug";
 import { Comment, Status, Ticket } from "@/lib/types";
 
 const statuses: Status[] = ["open", "in_progress", "resolved", "closed"];
 
 export default function AgentTicketDetailPage() {
-  const { id } = useParams<{ id: string }>();
+  const params = useParams<{ id: string }>();
+  const id = extractTicketId(params.id);
   const queryClient = useQueryClient();
 
   const { data: ticket } = useQuery({
@@ -72,57 +74,68 @@ export default function AgentTicketDetailPage() {
 
   if (!ticket) {
     return (
-      <div className="space-y-3">
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-20 w-full" />
+      <div className="grid grid-cols-12 gap-4">
+        <div className="col-span-12 space-y-3 lg:col-span-8">
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-20 w-full" />
+        </div>
+        <div className="col-span-12 lg:col-span-4">
+          <Skeleton className="h-64 w-full" />
+        </div>
       </div>
     );
   }
 
   return (
-    <section className="space-y-4 fade-in">
-      <div className="rounded-xl border border-[var(--line)] bg-white p-5">
-        <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">#{ticket.id.slice(0, 8).toUpperCase()}</p>
-        <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
-        <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
-        <div className="mt-4 flex items-center gap-2">
-          <select
-            className="h-10 rounded-md border border-[var(--line)] px-3"
-            value={statusOverride ?? ticket.status}
-            onChange={(e) => setStatusOverride(e.target.value as Status)}
-          >
-            {statuses.map((item) => (
-              <option key={item} value={item}>
-                {item}
-              </option>
-            ))}
-          </select>
-          <Button onClick={updateStatus}>Update Status</Button>
+    <div className="grid grid-cols-12 gap-4 fade-in">
+      {/* ── Left column: ticket details + reply ── */}
+      <div className="col-span-12 space-y-4 lg:col-span-8">
+        <div className="rounded-xl border border-[var(--line)] bg-white p-5">
+          <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">#{ticket.id.slice(0, 8).toUpperCase()}</p>
+          <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
+          <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
+          <div className="mt-4 flex items-center gap-2">
+            <select
+              className="h-10 rounded-md border border-[var(--line)] px-3"
+              value={statusOverride ?? ticket.status}
+              onChange={(e) => setStatusOverride(e.target.value as Status)}
+            >
+              {statuses.map((item) => (
+                <option key={item} value={item}>
+                  {item}
+                </option>
+              ))}
+            </select>
+            <Button onClick={updateStatus}>Update Status</Button>
+          </div>
+        </div>
+
+        <AiSuggestedReply
+          suggestion={ticket.ai_suggested_response}
+          onUse={setDraftReply}
+          onGenerate={async () => generateReply(false)}
+          onRegenerate={async () => generateReply(true)}
+          isGenerating={isGeneratingAiReply}
+        />
+
+        <CommentBox canInternal={true} onSubmit={addComment} value={draftReply} onValueChange={setDraftReply} />
+
+        <div className="space-y-3">
+          {comments.map((comment) => (
+            <article key={comment.id} className="rounded-xl border border-[var(--line)] bg-white p-4">
+              <p className="text-sm text-[var(--muted)]">
+                {comment.author.full_name} {comment.is_internal ? "(internal)" : ""}
+              </p>
+              <RichBody text={comment.body} className="mt-1" />
+            </article>
+          ))}
         </div>
       </div>
 
-      <AiSuggestedReply
-        suggestion={ticket.ai_suggested_response}
-        onUse={setDraftReply}
-        onGenerate={async () => generateReply(false)}
-        onRegenerate={async () => generateReply(true)}
-        isGenerating={isGeneratingAiReply}
-      />
-
-      <CommentBox canInternal={true} onSubmit={addComment} value={draftReply} onValueChange={setDraftReply} />
-
-      <div className="space-y-3">
-        {comments.map((comment) => (
-          <article key={comment.id} className="rounded-xl border border-[var(--line)] bg-white p-4">
-            <p className="text-sm text-[var(--muted)]">
-              {comment.author.full_name} {comment.is_internal ? "(internal)" : ""}
-            </p>
-            <RichBody text={comment.body} className="mt-1" />
-          </article>
-        ))}
+      {/* ── Right column: activity log ── */}
+      <div className="col-span-12 lg:col-span-4">
+        <ActivityTimeline activities={ticket.activities ?? []} />
       </div>
-
-      <ActivityTimeline activities={ticket.activities ?? []} />
-    </section>
+    </div>
   );
 }

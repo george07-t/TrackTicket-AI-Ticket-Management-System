@@ -6,6 +6,7 @@ import { toast } from "react-toastify";
 import { Button } from "@/components/ui/button";
 import { TextArea } from "@/components/ui/input";
 import { api, getApiErrorMessage, getMediaUrl } from "@/lib/api";
+import { attachmentName } from "@/lib/slug";
 
 const MAX_IMAGES = 5;
 const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
@@ -163,7 +164,7 @@ export function CommentBox({
             <div key={i} className="group relative">
               <img
                 src={getMediaUrl(url)}
-                alt={`Attachment ${i + 1}`}
+                alt={attachmentName(url)}
                 className="h-16 w-16 rounded-lg border border-[var(--line)] object-cover"
               />
               <button

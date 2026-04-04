@@ -2,6 +2,7 @@
 
 import { useMemo } from "react";
 import { getMediaUrl } from "@/lib/api";
+import { attachmentName } from "@/lib/slug";
 
 // Matches markdown image syntax:  ![alt text](url)
 const IMG_RE = /!\[([^\]]*)\]\(([^)]+)\)/g;
@@ -40,7 +41,7 @@ export function RichBody({ text, className = "" }: { text: string; className?: s
             >
               <img
                 src={getMediaUrl(url)}
-                alt={`Attachment ${i + 1}`}
+                alt={attachmentName(url)}
                 className="max-h-52 max-w-xs object-contain"
               />
             </a>

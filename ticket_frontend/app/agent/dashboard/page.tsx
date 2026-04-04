@@ -10,6 +10,7 @@ import { AiBadge } from "@/components/tickets/ai-badge";
 import { StatusBadge } from "@/components/tickets/status-badge";
 import { Table } from "@/components/ui/table";
 import { api } from "@/lib/api";
+import { ticketSlug } from "@/lib/slug";
 import { AgentStats, Ticket } from "@/lib/types";
 
 export default function AgentDashboardPage() {
@@ -64,7 +65,7 @@ export default function AgentDashboardPage() {
           {data.map((ticket) => (
             <tr key={ticket.id} className="border-t border-[var(--line)]">
               <td className="px-4 py-3">
-                <Link className="font-medium hover:underline" href={`/agent/tickets/${ticket.id}`}>
+                <Link className="font-medium hover:underline" href={`/agent/tickets/${ticketSlug(ticket)}`}>
                   {ticket.title}
                 </Link>
               </td>

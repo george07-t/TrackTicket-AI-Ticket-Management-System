@@ -5,6 +5,7 @@ import { toast } from "react-toastify";
 
 import { TicketForm } from "@/components/tickets/ticket-form";
 import { api, getApiErrorMessage } from "@/lib/api";
+import { ticketSlug } from "@/lib/slug";
 import { Ticket } from "@/lib/types";
 
 export default function NewTicketPage() {
@@ -14,7 +15,7 @@ export default function NewTicketPage() {
     try {
       const response = await api.post<Ticket>("/tickets", { title, description });
       toast.success("Ticket created");
-      router.push(`/customer/tickets/${response.data.id}`);
+      router.push(`/customer/tickets/${ticketSlug(response.data)}`);
     } catch (error) {
       toast.error(getApiErrorMessage(error, "Failed to create ticket"));
     }

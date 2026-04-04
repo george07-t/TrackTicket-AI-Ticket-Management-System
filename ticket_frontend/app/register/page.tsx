@@ -5,9 +5,8 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { toast } from "react-toastify";
-import PhoneInput from "react-phone-number-input";
 import type { Value as PhoneValue } from "react-phone-number-input";
-import "react-phone-number-input/style.css";
+import { PhoneField } from "@/components/ui/phone-field";
 
 import { AuthShell } from "@/components/auth/auth-shell";
 import { Button } from "@/components/ui/button";
@@ -82,15 +81,7 @@ function RegisterForm() {
         </label>
         <Input placeholder="Full name" value={fullName} onChange={(e) => setFullName(e.target.value)} required />
         <Input placeholder="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
-        <div className="phone-input-wrapper">
-          <PhoneInput
-            international
-            defaultCountry="US"
-            placeholder="Phone number"
-            value={phone}
-            onChange={(val) => setPhone(val)}
-          />
-        </div>
+        <PhoneField value={phone} onChange={setPhone} />
         <div className="relative">
           <Input
             placeholder="Password (min 8 characters)"

@@ -2,9 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { toast } from "react-toastify";
-import PhoneInput from "react-phone-number-input";
 import type { Value as PhoneValue } from "react-phone-number-input";
-import "react-phone-number-input/style.css";
+import { PhoneField } from "@/components/ui/phone-field";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
 
@@ -269,15 +268,7 @@ export default function ProfilePage() {
 
             <div className="space-y-1">
               <label className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Phone Number</label>
-              <div className="phone-input-wrapper">
-                <PhoneInput
-                  international
-                  defaultCountry="US"
-                  placeholder="Phone number"
-                  value={phone}
-                  onChange={(val) => setPhone(val)}
-                />
-              </div>
+              <PhoneField value={phone} onChange={setPhone} />
             </div>
 
             {role === "agent" ? (
