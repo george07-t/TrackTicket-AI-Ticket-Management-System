@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
 import { AuthShell } from "@/components/auth/auth-shell";
 import { OtpInput } from "@/components/tickets/otp-input";

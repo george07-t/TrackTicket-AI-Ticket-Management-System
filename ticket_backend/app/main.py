@@ -1,13 +1,15 @@
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 
 from app.config import settings
 from app.database import engine
-from app.routers import auth, dashboard, tickets, users
+from app.routers import attachments, auth, dashboard, tickets, users
 
 logging.basicConfig(
     level=logging.INFO,
@@ -15,10 +17,13 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+UPLOAD_DIR = Path(__file__).parent.parent / "uploads"
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # ── startup ──────────────────────────────────────────────
+    UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
     try:
         async with engine.connect() as conn:
             await conn.execute(text("SELECT 1"))
@@ -48,13 +53,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Routers
+# API routers
 app.include_router(auth.router, prefix="/api")
 app.include_router(tickets.router, prefix="/api")
 app.include_router(users.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
+app.include_router(attachments.router, prefix="/api")
 
 
 @app.get("/health", tags=["health"])
 async def health() -> dict:
     return {"status": "ok", "app": settings.app_name}
+
+
+# Serve uploaded images — mounted last so /api routes take priority.
+app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR), check_dir=False), name="uploads")

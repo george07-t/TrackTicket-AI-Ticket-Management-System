@@ -1,35 +1,91 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
+import Skeleton from "react-loading-skeleton";
+import "react-loading-skeleton/dist/skeleton.css";
 
 import { ActivityTimeline } from "@/components/tickets/activity-timeline";
 import { AiBadge } from "@/components/tickets/ai-badge";
 import { CommentBox } from "@/components/tickets/comment-box";
+import { RichBody } from "@/components/tickets/rich-body";
 import { StatusBadge } from "@/components/tickets/status-badge";
-import { Skeleton } from "@/components/ui/skeleton";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { Comment, Ticket } from "@/lib/types";
+
+// Poll every 2.5 s while AI is processing; give up after 60 s if AI never responds.
+const POLL_INTERVAL_MS = 2_500;
+const AI_POLL_TIMEOUT_MS = 60_000;
 
 export default function CustomerTicketDetailPage() {
   const { id } = useParams<{ id: string }>();
   const queryClient = useQueryClient();
 
-  const { data: ticket } = useQuery({
+  // Refs hold the *previous* snapshot so we can detect the exact moment
+  // each field transitions and fire a one-shot toast.
+  // Initialised to null = "not yet seen any data" (first render guard).
+  const prevAiClassified = useRef<boolean | null>(null);
+  // undefined = not yet initialised; string | null after first render.
+  const prevAssignedTo = useRef<string | null | undefined>(undefined);
+
+  const { data: ticket } = useQuery<Ticket>({
     queryKey: ["ticket", id],
-    queryFn: async () => {
-      const response = await api.get<Ticket>(`/tickets/${id}`);
-      return response.data;
+    queryFn: async () => (await api.get<Ticket>(`/tickets/${id}`)).data,
+
+    // Poll only while AI classification is still pending.
+    // Classification and assignment are committed together by the background
+    // task, so ai_classified = true means the assignment is also finalised.
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return POLL_INTERVAL_MS;           // keep polling until first load
+      if (data.ai_classified) return false;         // done — stop polling
+      const ageMs = Date.now() - new Date(data.created_at).getTime();
+      if (ageMs > AI_POLL_TIMEOUT_MS) return false; // safety cutoff — AI may have failed
+      return POLL_INTERVAL_MS;
     },
+
+    // Window-focus refetch is irrelevant while the interval is active.
+    refetchOnWindowFocus: false,
   });
+
+  // Detect state transitions and fire toasts exactly once each.
+  useEffect(() => {
+    if (!ticket) return;
+
+    // ── First render: snapshot current state, nothing to notify yet ──────────
+    if (prevAiClassified.current === null) {
+      prevAiClassified.current = ticket.ai_classified;
+      prevAssignedTo.current = ticket.assigned_to;
+      return;
+    }
+
+    // ── Classification just completed (false → true) ──────────────────────
+    if (!prevAiClassified.current && ticket.ai_classified) {
+      const category = ticket.category ?? "general";
+      const priority = ticket.priority ?? "medium";
+      toast.success(`Ticket classified — ${category} · ${priority} priority`, { autoClose: 6000 });
+      prevAiClassified.current = true;
+    }
+
+    // ── Assignment changed (null → agent, or AI reassigned to different agent)
+    // We compare by value, not by truthiness, to catch the load-balance → AI
+    // reassignment case where both old and new values are non-null strings.
+    if (
+      prevAssignedTo.current !== ticket.assigned_to &&
+      ticket.assigned_to !== null &&
+      ticket.assignee
+    ) {
+      toast.success(`Assigned to ${ticket.assignee.full_name}`, { autoClose: 6000 });
+    }
+    // Always update the snapshot, even if no toast fired (e.g. unassigned).
+    prevAssignedTo.current = ticket.assigned_to;
+  }, [ticket]);
 
   const { data: comments = [] } = useQuery({
     queryKey: ["ticket-comments", id],
-    queryFn: async () => {
-      const response = await api.get<Comment[]>(`/tickets/${id}/comments`);
-      return response.data;
-    },
+    queryFn: async () => (await api.get<Comment[]>(`/tickets/${id}/comments`)).data,
   });
 
   async function addComment(body: string) {
@@ -43,11 +99,13 @@ export default function CustomerTicketDetailPage() {
     }
   }
 
+  // ── Loading skeleton ────────────────────────────────────────────────────────
   if (!ticket) {
     return (
       <div className="space-y-3">
-        <Skeleton className="h-32 w-full" />
-        <Skeleton className="h-24 w-full" />
+        <Skeleton height={130} borderRadius={12} />
+        <Skeleton height={96} borderRadius={12} />
+        <Skeleton height={80} borderRadius={12} />
       </div>
     );
   }
@@ -57,38 +115,77 @@ export default function CustomerTicketDetailPage() {
 
   return (
     <section className="space-y-4 fade-in">
+
+      {/* ── Real-time processing banner ─────────────────────────────────────
+          Visible only while ai_classified = false. Disappears the moment
+          the background task commits (caught by the next 2.5 s poll).      */}
+      {!ticket.ai_classified && (
+        <div className="flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3">
+          <span className="relative flex h-3 w-3 shrink-0">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-75" />
+            <span className="relative inline-flex h-3 w-3 rounded-full bg-indigo-500" />
+          </span>
+          <p className="text-sm font-medium text-indigo-800">
+            AI is analyzing your ticket — category, priority and agent assignment will update in a moment…
+          </p>
+        </div>
+      )}
+
+      {/* ── Ticket card ─────────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-[var(--line)] bg-white p-5">
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">{ticketRef}</p>
         <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
-        <p className="mt-2 text-[var(--muted)]">{ticket.description}</p>
-        {ticket.resolved_at ? <p className="mt-2 text-sm text-emerald-700">Resolved at {new Date(ticket.resolved_at).toLocaleString()}</p> : null}
-        <div className="mt-4 flex gap-3">
+        <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
+        {ticket.resolved_at ? (
+          <p className="mt-2 text-sm text-emerald-700">
+            Resolved at {new Date(ticket.resolved_at).toLocaleString()}
+          </p>
+        ) : null}
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <StatusBadge status={ticket.status} />
+          {/* AiBadge shows "Classifying…" while ai_classified = false, then the
+              real category + priority badges once the poll updates the data.  */}
           <AiBadge
             category={ticket.category}
             priority={ticket.priority}
             aiClassified={ticket.ai_classified}
             aiConfidenceNote={ticket.ai_confidence_note}
           />
+          {ticket.assignee && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              {ticket.assignee.full_name}
+            </span>
+          )}
         </div>
       </div>
 
+      {/* ── Comment box ─────────────────────────────────────────────────────── */}
       <CommentBox
         canInternal={false}
         onSubmit={(body) => addComment(body)}
         disabled={isClosed}
-        disabledMessage={isClosed ? "Comments are closed for closed tickets" : "Visible to customer"}
+        disabledMessage={
+          isClosed ? "Comments are closed for closed tickets" : "Visible to customer"
+        }
       />
 
+      {/* ── Comments list ───────────────────────────────────────────────────── */}
       <div className="space-y-3">
         {comments.map((comment) => (
-          <article key={comment.id} className="rounded-xl border border-[var(--line)] bg-white p-4">
+          <article
+            key={comment.id}
+            className="rounded-xl border border-[var(--line)] bg-white p-4"
+          >
             <p className="text-sm text-[var(--muted)]">{comment.author.full_name}</p>
-            <p className="mt-1">{comment.body}</p>
+            <RichBody text={comment.body} className="mt-1" />
           </article>
         ))}
       </div>
 
+      {/* ── Activity timeline ────────────────────────────────────────────────
+          Activities are part of the ticket response, so they refresh
+          automatically on every poll — no separate query needed.             */}
       <ActivityTimeline activities={ticket.activities ?? []} />
     </section>
   );

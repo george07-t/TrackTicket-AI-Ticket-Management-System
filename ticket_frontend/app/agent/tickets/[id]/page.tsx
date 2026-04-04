@@ -3,11 +3,12 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
 import { ActivityTimeline } from "@/components/tickets/activity-timeline";
 import { AiSuggestedReply } from "@/components/tickets/ai-suggested-reply";
 import { CommentBox } from "@/components/tickets/comment-box";
+import { RichBody } from "@/components/tickets/rich-body";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { api, getApiErrorMessage } from "@/lib/api";
@@ -83,7 +84,7 @@ export default function AgentTicketDetailPage() {
       <div className="rounded-xl border border-[var(--line)] bg-white p-5">
         <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">#{ticket.id.slice(0, 8).toUpperCase()}</p>
         <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
-        <p className="mt-2 text-[var(--muted)]">{ticket.description}</p>
+        <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
         <div className="mt-4 flex items-center gap-2">
           <select
             className="h-10 rounded-md border border-[var(--line)] px-3"
@@ -116,7 +117,7 @@ export default function AgentTicketDetailPage() {
             <p className="text-sm text-[var(--muted)]">
               {comment.author.full_name} {comment.is_internal ? "(internal)" : ""}
             </p>
-            <p className="mt-1">{comment.body}</p>
+            <RichBody text={comment.body} className="mt-1" />
           </article>
         ))}
       </div>

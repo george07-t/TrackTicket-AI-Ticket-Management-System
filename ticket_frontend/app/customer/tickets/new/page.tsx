@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { toast } from "sonner";
+import { toast } from "react-toastify";
 
 import { TicketForm } from "@/components/tickets/ticket-form";
 import { api, getApiErrorMessage } from "@/lib/api";

@@ -15,6 +15,9 @@
     "next": "16.2.2",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "react-loading-skeleton": "^3.5.0",
+    "react-phone-number-input": "^3.4.16",
+    "react-toastify": "^11.0.5",
     "sonner": "^2.0.7",
     "zustand": "^5.0.0"
   },

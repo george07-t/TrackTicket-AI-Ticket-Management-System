@@ -249,11 +249,34 @@ async def _run_ai_classification(ticket_id: uuid.UUID, title: str, description: 
                 f"assignment_method: {ticket.assignment_method}"
             ),
         )
+
+        # Capture the final agent ID before commit so we can email them after.
+        final_assigned_to_id = ticket.assigned_to
+
         try:
             await db.commit()
         except Exception:
             logger.exception("Failed to save AI result for ticket %s", ticket_id)
             await db.rollback()
+            return
+
+        # Send assignment email to the FINAL agent (after AI has decided).
+        # This avoids notifying the wrong agent when AI reassigns away from
+        # the initial load-balance pick.
+        if final_assigned_to_id:
+            try:
+                final_agent = await db.get(User, final_assigned_to_id)
+                if final_agent:
+                    await send_ticket_assigned_email(
+                        final_agent.email,
+                        final_agent.full_name,
+                        title,
+                        str(ticket_id),
+                    )
+            except Exception:
+                logger.exception(
+                    "Failed to send assignment email for ticket %s", ticket_id
+                )
 
 
 # ─────────────────────────── routes ─────────────────────────────────────────
@@ -288,20 +311,8 @@ async def create_ticket(
     await db.commit()
     await db.refresh(ticket)
 
-    # Notify assigned agent via email (non-blocking)
-    if assigned_to:
-        result = await db.execute(select(User).where(User.id == assigned_to))
-        agent = result.scalar_one_or_none()
-        if agent:
-            background_tasks.add_task(
-                send_ticket_assigned_email,
-                agent.email,
-                agent.full_name,
-                ticket.title,
-                str(ticket.id),
-            )
-
-    # AI classification — FastAPI BackgroundTasks (correct pattern)
+    # Do NOT email the agent here — the AI background task may reassign to
+    # a different agent. We send one definitive email after AI decides.
     background_tasks.add_task(
         _run_ai_classification, ticket.id, ticket.title, ticket.description
     )

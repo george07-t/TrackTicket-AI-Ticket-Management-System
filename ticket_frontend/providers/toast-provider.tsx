@@ -1,7 +1,20 @@
 "use client";
 
-import { Toaster } from "sonner";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
 
 export function ToastProvider() {
-  return <Toaster richColors position="top-right" closeButton />;
+  return (
+    <ToastContainer
+      position="bottom-right"
+      autoClose={3500}
+      hideProgressBar={false}
+      newestOnTop
+      closeOnClick
+      pauseOnFocusLoss
+      draggable
+      pauseOnHover
+      theme="light"
+    />
+  );
 }

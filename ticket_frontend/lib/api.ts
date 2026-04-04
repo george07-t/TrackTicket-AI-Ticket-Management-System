@@ -4,6 +4,16 @@ import { clearAuthSession, getToken } from "./auth";
 
 const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
+// Strip the /api suffix to get the backend origin for serving static uploads.
+const mediaBase = baseURL.replace(/\/api\/?$/, "");
+
+/** Convert a backend-relative path like /uploads/abc.jpg into an absolute URL. */
+export function getMediaUrl(path: string): string {
+  if (!path) return "";
+  if (path.startsWith("http")) return path;
+  return `${mediaBase}${path}`;
+}
+
 export const api = axios.create({
   baseURL,
   timeout: 15000,
