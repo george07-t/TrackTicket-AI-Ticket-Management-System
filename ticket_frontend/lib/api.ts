@@ -6,11 +6,18 @@ const baseURL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
 
 // Strip the /api suffix to get the backend origin for serving static uploads.
 const mediaBase = baseURL.replace(/\/api\/?$/, "");
+const apiBase = baseURL.replace(/\/$/, "");
 
 /** Convert a backend-relative path like /uploads/abc.jpg into an absolute URL. */
 export function getMediaUrl(path: string): string {
   if (!path) return "";
   if (path.startsWith("http")) return path;
+
+  // Upload API returns paths like /uploads/foo.jpg; in production we route backend via /api.
+  if (path.startsWith("/uploads/")) {
+    return `${apiBase}${path}`;
+  }
+
   return `${mediaBase}${path}`;
 }
 
