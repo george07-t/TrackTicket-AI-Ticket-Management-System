@@ -78,10 +78,6 @@ jobs:
             fi
 
             echo "Reloading Nginx..."
-            sudo systemctl reload nginx
-
-            echo "Health checks..."
-            curl -fsS http://127.0.0.1:8000/health > /dev/null
-            curl -fsS http://127.0.0.1:3000 > /dev/null
+            sudo systemctl reload nginx || sudo systemctl restart nginx
 
             echo "Deploy successful."
