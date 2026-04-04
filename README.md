@@ -10,11 +10,11 @@ Production-grade customer support ticket system with three-role RBAC, a three-st
 
 ### Demo Video (Full Width)
 
-<video src="Videos/TrackTicket_Demo.mp4" controls width="100%"></video>
+https://github.com/user-attachments/assets/93d7d936-1d5e-4957-943e-9cfbfbcd9130
 
 If your markdown viewer does not render the player, use this direct link:
 
-- [Watch Demo Video](Videos/TrackTicket_Demo.mp4)
+- [Watch Demo Video](https://github.com/user-attachments/assets/93d7d936-1d5e-4957-943e-9cfbfbcd9130)
 
 ### Screenshots
 
