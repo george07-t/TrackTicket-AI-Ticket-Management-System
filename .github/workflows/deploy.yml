@@ -5,12 +5,6 @@ on:
     branches:
       - main
   workflow_dispatch:
-    inputs:
-      run_seed:
-        description: "Run docker seed job after deploy"
-        required: false
-        default: false
-        type: boolean
 
 concurrency:
   group: deploy-trackticket-production
@@ -26,14 +20,11 @@ jobs:
 
       - name: Deploy on EC2 via SSH
         uses: appleboy/ssh-action@v1.2.0
-        env:
-          RUN_SEED: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.run_seed || 'false' }}
         with:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
-          envs: RUN_SEED
           script_stop: true
           command_timeout: 30m
           script: |
@@ -66,16 +57,6 @@ jobs:
 
             echo "Starting services (staged startup)..."
             docker compose up -d
-            echo "Waiting for services to stabilize..."
-            sleep 10
-
-
-            if [ "$RUN_SEED" = "true" ]; then
-              echo "Running seed profile..."
-              docker compose --profile seed run --rm seed
-            else
-              echo "Seed step skipped."
-            fi
 
             echo "Reloading Nginx..."
             sudo systemctl reload nginx || sudo systemctl restart nginx
