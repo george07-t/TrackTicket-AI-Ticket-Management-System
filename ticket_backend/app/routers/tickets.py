@@ -307,7 +307,12 @@ async def list_tickets(
 ) -> list[Ticket]:
     stmt = (
         select(Ticket)
-        .options(selectinload(Ticket.creator), selectinload(Ticket.assignee))
+        .options(
+            selectinload(Ticket.creator),
+            selectinload(Ticket.assignee),
+            selectinload(Ticket.ai_suggested_agent),
+            selectinload(Ticket.deleted_by),
+        )
         .order_by(Ticket.created_at.desc())
     )
 

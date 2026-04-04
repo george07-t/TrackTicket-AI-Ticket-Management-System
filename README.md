@@ -233,6 +233,32 @@ docker compose down          # stop
 docker compose down -v       # stop + wipe DB volume
 ```
 
+### Run Backend Unit Test In Docker (Server)
+
+Use this to validate ticket CRUD + soft/permanent delete behavior on the deployed server stack.
+
+```bash
+# from project root on server
+git pull --ff-only origin main
+docker compose build backend
+docker compose up -d db backend
+
+# run the single backend test file inside the backend container
+docker compose exec backend sh -lc "pip install --no-cache-dir pytest anyio && pytest -vv tests/test_ticket_crud_roles.py"
+```
+
+Alternative one-shot command (spawns a temporary backend container):
+
+```bash
+docker compose run --rm backend sh -lc "pip install --no-cache-dir pytest anyio && pytest -vv tests/test_ticket_crud_roles.py"
+```
+
+Expected result:
+
+```text
+1 passed
+```
+
 ---
 
 ## Production Deployment (AWS EC2 + Nginx)
