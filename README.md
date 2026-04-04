@@ -8,7 +8,40 @@ Production-grade customer support ticket system with three-role RBAC, a three-st
 
 ## Screenshots & Demo
 
-> _Screenshots and demo video coming here._
+### Demo Video (Full Width)
+
+<video src="Videos/TrackTicket_Demo.mp4" controls width="100%"></video>
+
+If your markdown viewer does not render the player, use this direct link:
+
+- [Watch Demo Video](Videos/TrackTicket_Demo.mp4)
+
+### Screenshots
+
+<p align="center">
+  <img src="Images/landing.png" alt="Landing page" width="49%" />
+  <img src="Images/login.png" alt="Login page" width="49%" />
+</p>
+
+<p align="center">
+  <img src="Images/admin_dashboard.png" alt="Admin dashboard" width="49%" />
+  <img src="Images/admin_ticket.png" alt="Admin tickets" width="49%" />
+</p>
+
+<p align="center">
+  <img src="Images/admin_user.png" alt="Admin users" width="49%" />
+  <img src="Images/customer_dashboard.png" alt="Customer dashboard" width="49%" />
+</p>
+
+<p align="center">
+  <img src="Images/Agnet_Dashboard.png" alt="Agent dashboard" width="49%" />
+  <img src="Images/Agnet_ticket_update.png" alt="Agent ticket view" width="49%" />
+</p>
+
+<p align="center">
+  <img src="Images/Profile.png" alt="Profile page" width="49%" />
+  <img src="Images/email_conformation.png" alt="Email update notification" width="49%" />
+</p>
 
 ---
 
