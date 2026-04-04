@@ -96,7 +96,6 @@ jobs:
 
             if [ "$RUN_SEED" = "true" ]; then
               echo "Running seed profile..."
-              docker compose run --rm backend alembic upgrade head
               docker compose --profile seed run --rm seed
             else
               echo "Seed step skipped."
