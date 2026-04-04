@@ -124,6 +124,52 @@ Agents can regenerate the reply at any time (`force=True`), or use it as a draft
 
 ---
 
+## Technology, System Design, and AI Rationale
+
+This project intentionally favors a practical, production-oriented architecture over novelty. The goal is predictable operations on a small cloud instance while still providing strong AI-assisted ticket workflows.
+
+### Why This Technology Stack
+
+- FastAPI + async SQLAlchemy: chosen for high-concurrency I/O patterns (API + DB + AI calls + email) with clean dependency injection and typed contracts.
+- PostgreSQL: chosen for reliability, transactional consistency, and native enum/JSON support used by ticket classification and agent expertise fields.
+- Next.js + TypeScript: chosen for clear role-based routing, maintainable UI modules, and type-safe API usage across admin/agent/customer surfaces.
+- Docker Compose + Nginx: chosen to keep deployment simple and reproducible on a single EC2 host, with clean reverse-proxy boundaries (`/api` and web app routes).
+
+### System Design Principles
+
+- Role-segregated experience: one backend policy layer with role guards, three focused front-end workspaces (admin, agent, customer).
+- Non-blocking ticket creation: user gets immediate response while AI classification and assignment run asynchronously.
+- Auditable lifecycle: ticket activity timeline tracks major actions (created, reassigned, status changes, soft delete, AI events).
+- Safe deletion strategy:
+  - Customer delete: soft delete (hidden from customer, retained for admin/audit).
+  - Admin delete: supports both remove-from-customer and permanent delete when explicitly requested.
+- Resilient deployment flow: health checks, staged startup, and migration-first deployment reduce production drift.
+
+### AI Model Selection
+
+- Model family: Groq-hosted LLaMA 3.3 70B (via LangChain).
+- Why this model:
+  - Strong instruction-following quality for structured support tasks.
+  - Good speed/latency profile for interactive ticketing.
+  - Cost-effective for continuous triage and reply assistance.
+
+### Prompt Engineering Strategy
+
+- Pipeline prompts are separated by responsibility:
+  - Classification prompt: strict JSON output for `category`, `priority`, `suggested_response`, `confidence_note`.
+  - Routing prompt: selects best-fit agent from candidate JSON and returns confidence + rationale.
+  - Reply prompt: generates concise, empathetic, context-aware responses from ticket + conversation context.
+- Guardrails and fallback design:
+  - JSON parsing/validation enforced; parse failures fall back to safe defaults.
+  - Confidence threshold controls when AI suggestion is trusted versus load-balance fallback.
+  - Manual override exists for admin to correct AI outputs when business context requires it.
+- Prompt goals:
+  - Deterministic structure where required (classification/routing).
+  - Human tone where beneficial (reply generation).
+  - Operational safety over stylistic creativity.
+
+---
+
 ## Features
 
 ### Customer
