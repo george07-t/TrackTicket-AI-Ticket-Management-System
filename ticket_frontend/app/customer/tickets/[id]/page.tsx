@@ -1,29 +1,38 @@
 "use client";
 
-import { useEffect, useRef } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useRef, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
+import { Pencil, Trash2 } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/tickets/activity-timeline";
 import { AiBadge } from "@/components/tickets/ai-badge";
 import { CommentBox } from "@/components/tickets/comment-box";
 import { RichBody } from "@/components/tickets/rich-body";
 import { StatusBadge } from "@/components/tickets/status-badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { RichEditor } from "@/components/ui/rich-editor";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { extractTicketId } from "@/lib/slug";
 import { Comment, Ticket } from "@/lib/types";
 
-// Poll every 2.5 s while AI is processing; give up after 60 s if AI never responds.
+// Poll every 2.5 s while AI is processing.
 const POLL_INTERVAL_MS = 2_500;
-const AI_POLL_TIMEOUT_MS = 60_000;
 
 export default function CustomerTicketDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = extractTicketId(params.id);
   const queryClient = useQueryClient();
+  const [isEditingTicket, setIsEditingTicket] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
+  const [editingCommentBody, setEditingCommentBody] = useState("");
 
   // Refs track previous values to fire one-shot toasts on state transitions.
   const prevAiClassified = useRef<boolean | null>(null);
@@ -37,8 +46,6 @@ export default function CustomerTicketDetailPage() {
       const data = query.state.data;
       if (!data) return POLL_INTERVAL_MS;
       if (data.ai_classified) return false;
-      const ageMs = Date.now() - new Date(data.created_at).getTime();
-      if (ageMs > AI_POLL_TIMEOUT_MS) return false;
       return POLL_INTERVAL_MS;
     },
 
@@ -87,6 +94,44 @@ export default function CustomerTicketDetailPage() {
     }
   }
 
+  async function saveTicketEdits() {
+    try {
+      await api.patch(`/tickets/${id}`, { title: editTitle, description: editDescription });
+      toast.success("Ticket updated");
+      setIsEditingTicket(false);
+      await queryClient.invalidateQueries({ queryKey: ["ticket", id] });
+      await queryClient.invalidateQueries({ queryKey: ["customer-tickets"] });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to update ticket"));
+    }
+  }
+
+  async function deleteTicket() {
+    if (!confirm("Delete this ticket from your view? Admin can still see it for tracking.")) {
+      return;
+    }
+    try {
+      await api.delete(`/tickets/${id}`);
+      toast.success("Ticket removed from your list");
+      await queryClient.invalidateQueries({ queryKey: ["customer-tickets"] });
+      router.push("/customer/dashboard");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to delete ticket"));
+    }
+  }
+
+  async function saveCommentEdit(commentId: string) {
+    try {
+      await api.patch(`/tickets/${id}/comments/${commentId}`, { body: editingCommentBody });
+      toast.success("Reply updated");
+      setEditingCommentId(null);
+      setEditingCommentBody("");
+      await queryClient.invalidateQueries({ queryKey: ["ticket-comments", id] });
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to update reply"));
+    }
+  }
+
   if (!ticket) {
     return (
       <div className="grid grid-cols-12 gap-4">
@@ -103,7 +148,7 @@ export default function CustomerTicketDetailPage() {
   }
 
   const ticketRef = `#${ticket.id.slice(0, 8).toUpperCase()}`;
-  const isClosed = ticket.status === "closed";
+  const canEditTicket = ticket.status !== "resolved" && ticket.status !== "closed";
 
   return (
     <div className="grid grid-cols-12 gap-4 fade-in">
@@ -122,8 +167,45 @@ export default function CustomerTicketDetailPage() {
 
         <div className="rounded-xl border border-[var(--line)] bg-white p-5">
           <p className="text-xs font-semibold uppercase tracking-wider text-[var(--muted)]">{ticketRef}</p>
-          <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
-          <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
+          {!isEditingTicket ? (
+            <>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
+                <div className="flex items-center gap-2">
+                  {canEditTicket && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setEditTitle(ticket.title);
+                        setEditDescription(ticket.description);
+                        setIsEditingTicket(true);
+                      }}
+                    >
+                      <Pencil className="mr-1 h-4 w-4" />
+                      Edit
+                    </Button>
+                  )}
+                  <Button type="button" variant="secondary" onClick={deleteTicket}>
+                    <Trash2 className="mr-1 h-4 w-4" />
+                    Delete
+                  </Button>
+                </div>
+              </div>
+              <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
+            </>
+          ) : (
+            <div className="space-y-3">
+              <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} />
+              <RichEditor content={editDescription} onChange={setEditDescription} minHeight="10rem" />
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" onClick={saveTicketEdits}>Save Changes</Button>
+                <Button type="button" variant="secondary" onClick={() => setIsEditingTicket(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
           {ticket.resolved_at ? (
             <p className="mt-2 text-sm text-emerald-700">
               Resolved at {new Date(ticket.resolved_at).toLocaleString()}
@@ -149,9 +231,9 @@ export default function CustomerTicketDetailPage() {
         <CommentBox
           canInternal={false}
           onSubmit={(body) => addComment(body)}
-          disabled={isClosed}
+          disabled={!canEditTicket}
           disabledMessage={
-            isClosed ? "Comments are closed for closed tickets" : "Visible to customer"
+            !canEditTicket ? "Replies are locked after resolve/close" : "Visible to customer"
           }
         />
 
@@ -161,8 +243,45 @@ export default function CustomerTicketDetailPage() {
               key={comment.id}
               className="rounded-xl border border-[var(--line)] bg-white p-4"
             >
-              <p className="text-sm text-[var(--muted)]">{comment.author.full_name}</p>
-              <RichBody text={comment.body} className="mt-1" />
+              <div className="flex items-start justify-between gap-2">
+                <p className="text-sm text-[var(--muted)]">
+                  {comment.author.full_name}
+                  {comment.is_edited ? " (edited)" : ""}
+                </p>
+                {comment.author_id === ticket.created_by && canEditTicket && (
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 text-xs text-[var(--brand)]"
+                    onClick={() => {
+                      setEditingCommentId(comment.id);
+                      setEditingCommentBody(comment.body);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                    Edit
+                  </button>
+                )}
+              </div>
+              {editingCommentId === comment.id ? (
+                <div className="mt-2 space-y-2">
+                  <RichEditor content={editingCommentBody} onChange={setEditingCommentBody} minHeight="7rem" />
+                  <div className="flex gap-2">
+                    <Button type="button" onClick={() => saveCommentEdit(comment.id)}>Save</Button>
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      onClick={() => {
+                        setEditingCommentId(null);
+                        setEditingCommentBody("");
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <RichBody text={comment.body} className="mt-1" />
+              )}
             </article>
           ))}
         </div>

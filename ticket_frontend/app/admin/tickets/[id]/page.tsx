@@ -1,9 +1,10 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
+import { Trash2 } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/tickets/activity-timeline";
 import { AiBadge } from "@/components/tickets/ai-badge";
@@ -21,6 +22,7 @@ const priorities: Priority[] = ["low", "medium", "high", "critical"];
 
 export default function AdminTicketDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const id = extractTicketId(params.id);
   const queryClient = useQueryClient();
 
@@ -88,6 +90,21 @@ export default function AdminTicketDetailPage() {
     }
   }
 
+  async function softDeleteTicket() {
+    if (!confirm("Hide this ticket from customer view? Admin will still be able to track it.")) {
+      return;
+    }
+    try {
+      await api.delete(`/tickets/${id}`);
+      toast.success("Ticket removed from customer view");
+      await queryClient.invalidateQueries({ queryKey: ["admin-tickets"] });
+      await queryClient.invalidateQueries({ queryKey: ["admin-ticket", id] });
+      router.push("/admin/tickets");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error, "Failed to delete ticket"));
+    }
+  }
+
   if (!ticket) {
     return (
       <div className="grid grid-cols-12 gap-4">
@@ -118,6 +135,11 @@ export default function AdminTicketDetailPage() {
               aiClassified={ticket.ai_classified}
               aiConfidenceNote={ticket.ai_confidence_note}
             />
+            {ticket.is_deleted_for_customer && (
+              <span className="inline-flex items-center rounded-full bg-rose-100 px-2.5 py-1 text-xs font-semibold text-rose-700">
+                Removed from customer view
+              </span>
+            )}
           </div>
           {ticket.ai_confidence_note ? <p className="mt-2 text-sm text-[var(--muted)]">AI note: {ticket.ai_confidence_note}</p> : null}
           <p className="mt-1 text-sm text-[var(--muted)]">
@@ -129,6 +151,17 @@ export default function AdminTicketDetailPage() {
               {ticket.ai_assignment_confidence !== null ? ` (${Math.round(ticket.ai_assignment_confidence * 100)}% confidence)` : ""}
             </p>
           ) : null}
+          {ticket.deleted_at && (
+            <p className="mt-1 text-sm text-[var(--muted)]">
+              Removed at {new Date(ticket.deleted_at).toLocaleString()} by {ticket.deleted_by?.full_name ?? "unknown"}
+            </p>
+          )}
+          <div className="mt-4">
+            <Button type="button" variant="secondary" onClick={softDeleteTicket}>
+              <Trash2 className="mr-1 h-4 w-4" />
+              Remove from customer
+            </Button>
+          </div>
         </div>
 
         <AiSuggestedReply

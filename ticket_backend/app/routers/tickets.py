@@ -14,7 +14,7 @@ from app.dependencies import get_current_user, is_agent_profile_complete, requir
 from app.models.comment import Comment
 from app.models.ticket import Ticket, TicketActivity, TicketCategory, TicketPriority, TicketStatus
 from app.models.user import User, UserRole
-from app.schemas.comment import CommentCreate, CommentOut
+from app.schemas.comment import CommentCreate, CommentOut, CommentUpdate
 from app.schemas.ticket import TicketAiOverride, TicketAiReplyGenerate, TicketCreate, TicketDetailOut, TicketOut, TicketUpdate
 from app.services.ai_service import AiService
 from app.services.email_service import send_ticket_assigned_email, send_ticket_update_email
@@ -47,6 +47,7 @@ async def _load_ticket(
         selectinload(Ticket.creator),
         selectinload(Ticket.assignee),
         selectinload(Ticket.ai_suggested_agent),
+        selectinload(Ticket.deleted_by),
     ]
     if with_activities:
         opts.append(
@@ -311,7 +312,10 @@ async def list_tickets(
     )
 
     if current_user.role == UserRole.CUSTOMER:
-        stmt = stmt.where(Ticket.created_by == current_user.id)
+        stmt = stmt.where(
+            Ticket.created_by == current_user.id,
+            Ticket.is_deleted_for_customer.is_(False),
+        )
     elif current_user.role == UserRole.AGENT:
         _ensure_agent_profile_complete(current_user)
         stmt = stmt.where(Ticket.assigned_to == current_user.id)
@@ -339,6 +343,8 @@ async def get_ticket(
         _ensure_agent_profile_complete(current_user)
 
     ticket = await _load_ticket(db, ticket_id, with_activities=True)
+    if current_user.role == UserRole.CUSTOMER and ticket.is_deleted_for_customer:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
     if not _can_access_ticket(current_user, ticket):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     return ticket
@@ -350,20 +356,46 @@ async def update_ticket(
     payload: TicketUpdate,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.AGENT)),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.AGENT, UserRole.CUSTOMER)),
 ) -> Ticket:
     if current_user.role == UserRole.AGENT:
         _ensure_agent_profile_complete(current_user)
 
     ticket = await _load_ticket(db, ticket_id)
 
-    if current_user.role == UserRole.AGENT and not _can_access_ticket(current_user, ticket):
+    if not _can_access_ticket(current_user, ticket):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You can only update tickets assigned to you",
+            detail="Access denied",
         )
 
+    if current_user.role == UserRole.CUSTOMER:
+        if ticket.is_deleted_for_customer:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
+        if ticket.status in {TicketStatus.RESOLVED, TicketStatus.CLOSED}:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Resolved or closed tickets cannot be edited",
+            )
+
     changes = []
+
+    if payload.title is not None and payload.title != ticket.title:
+        old_title = ticket.title
+        ticket.title = payload.title
+        changes.append(f"Title updated: '{old_title}' → '{payload.title}'")
+
+    if payload.description is not None and payload.description != ticket.description:
+        ticket.description = payload.description
+        changes.append("Description updated")
+
+    if current_user.role == UserRole.CUSTOMER and (
+        payload.status is not None or "assigned_to" in payload.model_fields_set
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Customers cannot change status or assignment",
+        )
 
     if payload.status is not None and payload.status != ticket.status:
         old_status = ticket.status
@@ -393,6 +425,11 @@ async def update_ticket(
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only admins can reassign tickets",
+            )
+        if current_user.role == UserRole.CUSTOMER:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Customers cannot reassign tickets",
             )
 
         if payload.assigned_to != ticket.assigned_to:
@@ -428,6 +465,11 @@ async def update_ticket(
             action="updated",
             detail="; ".join(changes),
             actor_id=current_user.id,
+        )
+    else:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No changes detected",
         )
 
     await db.commit()
@@ -515,12 +557,34 @@ async def generate_ai_reply(
 async def delete_ticket(
     ticket_id: uuid.UUID,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(require_role(UserRole.ADMIN)),
+    current_user: User = Depends(require_role(UserRole.ADMIN, UserRole.CUSTOMER)),
 ) -> None:
-    ticket = await db.get(Ticket, ticket_id)
+    ticket = await _load_ticket(db, ticket_id)
     if not ticket:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Ticket not found")
-    await db.delete(ticket)
+
+    if current_user.role == UserRole.CUSTOMER and ticket.created_by != current_user.id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    if ticket.is_deleted_for_customer:
+        return
+
+    ticket.is_deleted_for_customer = True
+    ticket.deleted_at = datetime.now(timezone.utc)
+    ticket.deleted_by_id = current_user.id
+
+    await _log_activity(
+        db,
+        ticket_id=ticket.id,
+        action="soft_deleted",
+        detail=(
+            "Ticket hidden from customer by admin"
+            if current_user.role == UserRole.ADMIN
+            else "Ticket removed by customer"
+        ),
+        actor_id=current_user.id,
+    )
+
     await db.commit()
 
 
@@ -545,10 +609,13 @@ async def add_comment(
             detail="Customers cannot create internal notes",
         )
 
-    if current_user.role == UserRole.CUSTOMER and ticket.status == TicketStatus.CLOSED:
+    if current_user.role == UserRole.CUSTOMER and ticket.status in {
+        TicketStatus.RESOLVED,
+        TicketStatus.CLOSED,
+    }:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot comment on a closed ticket",
+            detail="Cannot comment on resolved or closed ticket",
         )
 
     comment = Comment(
@@ -609,3 +676,66 @@ async def list_comments(
 
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+@router.patch("/{ticket_id}/comments/{comment_id}", response_model=CommentOut)
+async def update_comment(
+    ticket_id: uuid.UUID,
+    comment_id: uuid.UUID,
+    payload: CommentUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> Comment:
+    if current_user.role == UserRole.AGENT:
+        _ensure_agent_profile_complete(current_user)
+
+    ticket = await _load_ticket(db, ticket_id)
+    if not _can_access_ticket(current_user, ticket):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+    if current_user.role == UserRole.CUSTOMER and ticket.status in {
+        TicketStatus.RESOLVED,
+        TicketStatus.CLOSED,
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Resolved or closed tickets cannot be edited",
+        )
+
+    result = await db.execute(
+        select(Comment)
+        .options(selectinload(Comment.author))
+        .where(Comment.id == comment_id, Comment.ticket_id == ticket_id)
+    )
+    comment = result.scalar_one_or_none()
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+
+    if current_user.role != UserRole.ADMIN and comment.author_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only edit your own comments",
+        )
+
+    if comment.body == payload.body:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No changes detected")
+
+    comment.body = payload.body
+    comment.is_edited = True
+    comment.updated_at = datetime.now(timezone.utc)
+    comment.edited_by_id = current_user.id
+
+    await _log_activity(
+        db,
+        ticket_id=ticket.id,
+        action="comment_updated",
+        detail=f"Comment updated by {current_user.full_name}",
+        actor_id=current_user.id,
+    )
+
+    await db.commit()
+    await db.refresh(comment)
+    result = await db.execute(
+        select(Comment).options(selectinload(Comment.author)).where(Comment.id == comment.id)
+    )
+    return result.scalar_one()

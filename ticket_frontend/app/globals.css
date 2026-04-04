@@ -115,3 +115,69 @@ body {
 .phone-input-wrapper .PhoneInputInput::placeholder {
   color: #94a3b8;
 }
+
+.rich-editor-content .tiptap,
+.rich-body {
+  min-height: 100%;
+  padding: 0.75rem;
+  color: var(--ink);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.rich-editor-content .tiptap:focus {
+  outline: none;
+}
+
+.rich-editor-content .tiptap p,
+.rich-body p {
+  margin: 0.5rem 0;
+}
+
+.rich-editor-content .tiptap h2,
+.rich-body h2 {
+  margin: 0.75rem 0 0.5rem;
+  font-size: 1.2rem;
+  font-weight: 700;
+}
+
+.rich-editor-content .tiptap h3,
+.rich-body h3 {
+  margin: 0.65rem 0 0.45rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.rich-editor-content .tiptap ul,
+.rich-editor-content .tiptap ol,
+.rich-body ul,
+.rich-body ol {
+  margin: 0.5rem 0;
+  padding-left: 1.25rem;
+}
+
+.rich-editor-content .tiptap blockquote,
+.rich-body blockquote {
+  margin: 0.5rem 0;
+  border-left: 3px solid var(--line);
+  padding-left: 0.75rem;
+  color: var(--muted);
+}
+
+.rich-editor-content .tiptap code,
+.rich-body code {
+  border-radius: 0.35rem;
+  background: #eef1f6;
+  padding: 0.1rem 0.35rem;
+  font-size: 0.85em;
+}
+
+.rich-editor-content .tiptap img,
+.rich-body img {
+  display: block;
+  max-width: min(100%, 34rem);
+  height: auto;
+  margin: 0.65rem 0;
+  border-radius: 0.65rem;
+  border: 1px solid var(--line);
+}

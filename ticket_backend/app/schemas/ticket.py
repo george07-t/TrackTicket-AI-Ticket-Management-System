@@ -35,8 +35,36 @@ class TicketCreate(BaseModel):
 
 
 class TicketUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
     status: TicketStatus | None = None
     assigned_to: uuid.UUID | None = None
+
+    @field_validator("title")
+    @classmethod
+    def title_not_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Title cannot be empty")
+        if len(v) < 5:
+            raise ValueError("Title must be at least 5 characters")
+        if len(v) > 200:
+            raise ValueError("Title cannot exceed 200 characters")
+        return v
+
+    @field_validator("description")
+    @classmethod
+    def description_not_empty(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        v = v.strip()
+        if not v:
+            raise ValueError("Description cannot be empty")
+        if len(v) < 10:
+            raise ValueError("Description must be at least 10 characters")
+        return v
 
 
 class TicketAiOverride(BaseModel):
@@ -79,9 +107,13 @@ class TicketOut(BaseModel):
     updated_at: datetime
     resolved_at: datetime | None
     first_response_at: datetime | None
+    is_deleted_for_customer: bool
+    deleted_at: datetime | None
+    deleted_by_id: uuid.UUID | None
     creator: UserOut
     assignee: UserOut | None
     ai_suggested_agent: UserOut | None
+    deleted_by: UserOut | None
 
     model_config = {"from_attributes": True}
 

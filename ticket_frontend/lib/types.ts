@@ -46,9 +46,13 @@ export interface Ticket {
   updated_at: string;
   resolved_at: string | null;
   first_response_at: string | null;
+  is_deleted_for_customer: boolean;
+  deleted_at: string | null;
+  deleted_by_id: string | null;
   creator: User;
   assignee: User | null;
   ai_suggested_agent: User | null;
+  deleted_by: User | null;
   activities?: TicketActivity[];
 }
 
@@ -58,6 +62,9 @@ export interface Comment {
   author_id: string;
   body: string;
   is_internal: boolean;
+  is_edited: boolean;
+  updated_at: string | null;
+  edited_by_id: string | null;
   created_at: string;
   author: User;
 }

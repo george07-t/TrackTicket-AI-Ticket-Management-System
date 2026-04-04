@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from enum import StrEnum
 
-from sqlalchemy import DateTime, Enum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -71,6 +71,13 @@ class Ticket(Base):
     assigned_to: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    is_deleted_for_customer: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deleted_by_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(
@@ -95,6 +102,7 @@ class Ticket(Base):
     creator = relationship("User", back_populates="tickets_created", foreign_keys=[created_by])
     assignee = relationship("User", back_populates="tickets_assigned", foreign_keys=[assigned_to])
     ai_suggested_agent = relationship("User", back_populates="ai_suggested_tickets", foreign_keys=[ai_suggested_agent_id])
+    deleted_by = relationship("User", foreign_keys=[deleted_by_id])
     comments = relationship("Comment", back_populates="ticket", cascade="all, delete-orphan")
     activities = relationship(
         "TicketActivity", back_populates="ticket", cascade="all, delete-orphan",

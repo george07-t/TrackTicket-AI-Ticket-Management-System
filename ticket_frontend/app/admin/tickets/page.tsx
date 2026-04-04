@@ -69,10 +69,10 @@ export default function AdminTicketsPage() {
         </label>
       </div>
 
-      <Table headers={["Title", "Category", "Priority", "Assignee"]}>
+      <Table headers={["Title", "Category", "Priority", "State", "Assignee"]}>
         {data.length === 0 && (
           <tr>
-            <td colSpan={4} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
+            <td colSpan={5} className="px-4 py-8 text-center text-sm text-[var(--muted)]">
               No tickets found.
             </td>
           </tr>
@@ -96,6 +96,13 @@ export default function AdminTicketsPage() {
                 <Badge label={ticket.priority} tone={priorityTone(ticket.priority)} />
               ) : (
                 <Badge label="pending" tone="neutral" />
+              )}
+            </td>
+            <td className="px-4 py-3">
+              {ticket.is_deleted_for_customer ? (
+                <Badge label="removed" tone="danger" />
+              ) : (
+                <Badge label="active" tone="success" />
               )}
             </td>
             <td className="px-4 py-3 text-sm">{ticket.assignee?.full_name ?? "unassigned"}</td>

@@ -85,7 +85,7 @@ Agents can regenerate the reply at any time (`force=True`), or use it as a draft
 | State | Zustand (auth) + TanStack Query (server) | minimal auth store, automatic cache/refetch |
 | HTTP | Axios | interceptor-based 401 auto-logout, typed responses |
 | UI | Tailwind CSS + custom design tokens | consistent `var(--brand)` system, no component library lock-in |
-| UX libs | react-toastify, react-loading-skeleton, react-phone-number-input | polished without bloat |
+| UX libs | react-toastify, react-loading-skeleton, react-phone-number-input, TipTap, DOMPurify | polished rich-text UX + safe HTML rendering |
 | Deployment | Docker Compose + AWS EC2 + Nginx | portable, single-host, no k8s overhead |
 | CI/CD | GitHub Actions → EC2 SSH | push-to-deploy, sequential low-memory builds |
 
@@ -95,23 +95,39 @@ Agents can regenerate the reply at any time (`force=True`), or use it as a draft
 
 ### Customer
 - Register with email verification (6-digit OTP)
-- Create tickets with image attachments (paste or file upload, up to 5 × 5 MB)
+- Create tickets with rich text (bold/italic/lists/headings/quotes/code/images)
+- Paste or upload images directly in the editor (up to 5 MB each)
 - Real-time AI classification badge (polls until classified, fires one-shot toast)
 - See assigned agent, ticket status, and comment thread
-- Cannot comment on closed tickets
+- Edit own ticket and own replies until ticket is resolved/closed
+- Soft-delete own ticket from customer view (admin still retains full audit visibility)
+- Cannot comment on resolved/closed tickets
 
 ### Agent
 - Dashboard with personal stats (assigned total, open, resolved, critical-open)
 - View assigned tickets only; workspace locked until profile is complete (expertise tags + capacity set)
-- Update ticket status, add replies or internal notes (internal notes hidden from customers)
+- Update ticket status, add replies/internal notes, and edit own replies with rich text
 - AI suggested reply with one-click draft insert or clipboard copy; regenerate on demand
 - First-response timestamp recorded automatically
 
 ### Admin
-- Full ticket access: reassign, override AI category/priority/suggested response, delete
+- Full ticket access: reassign, override AI category/priority/suggested response, and customer-soft-delete tracking
 - User management: create agents, activate/deactivate, toggle availability, delete
 - Analytics dashboard: totals by status/category/priority, avg resolution time, agent workload, reassignment rate, avg first-response time
 - Cannot deactivate or delete own account
+
+### Rich Text & Soft Delete Behavior
+
+- Ticket descriptions and replies are stored as rich HTML from TipTap
+- Rendered content is sanitized with DOMPurify, then shown with original formatting (including pasted images)
+- Reply edit tracking is kept (`is_edited`, `updated_at`, `edited_by_id`) and displayed in UI
+- Ticket delete is soft delete for customers: hidden from customer lists/details, still visible to admins with deleted metadata and activity history
+
+### URL Design
+
+- Ticket URLs use human-readable slugs: `/customer/tickets/{title-slug}-{uuid}`
+- `ticketSlug(ticket)` in `lib/slug.ts` generates the slug from the title; `extractTicketId()` recovers the UUID via regex for API calls
+- Attachment filenames are slugified on upload: `{original-stem}-{8-char-uid}.{ext}` (e.g. `my-screenshot-a3f9c12b.png`)
 
 ---
 
@@ -122,7 +138,7 @@ Agents can regenerate the reply at any time (`force=True`), or use it as a draft
 | Password storage | PBKDF2-SHA256 (Django-compatible, avoids bcrypt 72-byte limit) |
 | Timing attack on login | Dummy hash always evaluated even for non-existent email |
 | OTP brute-force | 5-attempt lockout; OTP cleared on lockout or expiry |
-| OTP expiry | 10-minute window, cleared from DB after use |
+| OTP expiry | 2-minute window, cleared from DB after use |
 | Password strength | 8+ chars, ≥1 uppercase, ≥1 digit — validated in Pydantic schema |
 | Role enforcement | `require_role()` dependency on every protected route |
 | Agent workspace gate | Profile completeness checked before any ticket/comment access |

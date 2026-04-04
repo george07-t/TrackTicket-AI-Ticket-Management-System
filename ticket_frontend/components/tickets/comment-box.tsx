@@ -1,33 +1,9 @@
 "use client";
 
-import { ClipboardEvent, FormEvent, useRef, useState } from "react";
-import { toast } from "react-toastify";
+import { FormEvent, useRef, useState } from "react";
 
 import { Button } from "@/components/ui/button";
-import { TextArea } from "@/components/ui/input";
-import { api, getApiErrorMessage, getMediaUrl } from "@/lib/api";
-import { attachmentName } from "@/lib/slug";
-
-const MAX_IMAGES = 5;
-const ALLOWED_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
-
-function ImageIcon() {
-  return (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-        d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-    </svg>
-  );
-}
-
-function Spinner() {
-  return (
-    <svg className="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24">
-      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-    </svg>
-  );
-}
+import { RichEditor, RichEditorHandle } from "@/components/ui/rich-editor";
 
 export function CommentBox({
   canInternal,
@@ -46,11 +22,13 @@ export function CommentBox({
 }) {
   const [body, setBody] = useState("");
   const [isInternal, setIsInternal] = useState(false);
-  const [attachments, setAttachments] = useState<string[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const fileRef = useRef<HTMLInputElement>(null);
+  const editorRef = useRef<RichEditorHandle>(null);
 
   const currentBody = value ?? body;
+  const plainBody = currentBody
+    .replace(/<[^>]*>/g, " ")
+    .replace(/&nbsp;/g, " ")
+    .trim();
 
   function updateBody(next: string) {
     if (onValueChange) {
@@ -60,117 +38,32 @@ export function CommentBox({
     }
   }
 
-  async function uploadFile(file: File) {
-    if (!ALLOWED_TYPES.has(file.type)) {
-      toast.error("Only image files are allowed (jpeg, png, gif, webp).");
-      return;
-    }
-    if (attachments.length >= MAX_IMAGES) {
-      toast.error(`You can attach up to ${MAX_IMAGES} images.`);
-      return;
-    }
-    setUploading(true);
-    try {
-      const form = new FormData();
-      form.append("file", file);
-      const { data } = await api.post<{ url: string }>("/attachments/upload", form);
-      setAttachments((prev) => [...prev, data.url]);
-    } catch (err) {
-      toast.error(getApiErrorMessage(err, "Failed to upload image."));
-    } finally {
-      setUploading(false);
-    }
-  }
-
-  function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
-    const imageItem = Array.from(e.clipboardData.items).find((item) =>
-      item.type.startsWith("image/")
-    );
-    if (!imageItem) return;
-    e.preventDefault();
-    const file = imageItem.getAsFile();
-    if (file) void uploadFile(file);
-  }
-
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (disabled) return;
 
-    const fullBody =
-      attachments.length > 0
-        ? `${currentBody}\n\n${attachments.map((u) => `![image](${u})`).join("\n")}`
-        : currentBody;
+    if (editorRef.current?.isEmpty()) {
+      return;
+    }
 
-    await onSubmit(fullBody, isInternal);
+    await onSubmit(currentBody, isInternal);
     updateBody("");
+    editorRef.current?.clear();
     setIsInternal(false);
-    setAttachments([]);
   }
 
   return (
     <form onSubmit={submit} className="space-y-3 rounded-xl border border-[var(--line)] bg-white p-4">
       <div className="relative">
-        <TextArea
-          value={currentBody}
-          onChange={(e) => updateBody(e.target.value)}
-          onPaste={handlePaste}
-          placeholder="Write a reply… You can paste or attach images."
-          rows={3}
-          required
+        <RichEditor
+          ref={editorRef}
+          content={currentBody}
+          onChange={updateBody}
+          placeholder="Write a reply with formatting or image paste/upload."
           disabled={disabled}
-          className="pb-9"
-        />
-
-        {!disabled && (
-          <button
-            type="button"
-            title={
-              attachments.length >= MAX_IMAGES
-                ? `Maximum ${MAX_IMAGES} images reached`
-                : "Attach image (or paste one)"
-            }
-            onClick={() => fileRef.current?.click()}
-            disabled={uploading || attachments.length >= MAX_IMAGES}
-            className="absolute bottom-2.5 right-2.5 rounded-md p-1.5 text-slate-400 transition hover:bg-slate-100 hover:text-[var(--brand)] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            {uploading ? <Spinner /> : <ImageIcon />}
-          </button>
-        )}
-
-        <input
-          ref={fileRef}
-          type="file"
-          accept="image/jpeg,image/png,image/gif,image/webp"
-          className="hidden"
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) void uploadFile(file);
-            e.target.value = "";
-          }}
+          minHeight="8rem"
         />
       </div>
-
-      {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {attachments.map((url, i) => (
-            <div key={i} className="group relative">
-              <img
-                src={getMediaUrl(url)}
-                alt={attachmentName(url)}
-                className="h-16 w-16 rounded-lg border border-[var(--line)] object-cover"
-              />
-              <button
-                type="button"
-                onClick={() => setAttachments((prev) => prev.filter((_, j) => j !== i))}
-                className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-red-500 text-xs font-bold text-white opacity-0 shadow transition-opacity group-hover:opacity-100"
-                title="Remove image"
-              >
-                ×
-              </button>
-            </div>
-          ))}
-        </div>
-      )}
 
       <div className="flex items-center justify-between">
         {canInternal ? (
@@ -186,7 +79,7 @@ export function CommentBox({
         ) : (
           <span className="text-sm text-[var(--muted)]">{disabledMessage ?? "Visible to customer"}</span>
         )}
-        <Button type="submit" disabled={disabled || uploading || (!currentBody.trim() && attachments.length === 0)}>
+        <Button type="submit" disabled={disabled || plainBody.length === 0}>
           Send
         </Button>
       </div>
