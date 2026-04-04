@@ -6,7 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "react-toastify";
 import Skeleton from "react-loading-skeleton";
 import "react-loading-skeleton/dist/skeleton.css";
-import { Pencil, Trash2 } from "lucide-react";
+import { MoreVertical, Pencil, Trash2 } from "lucide-react";
 
 import { ActivityTimeline } from "@/components/tickets/activity-timeline";
 import { AiBadge } from "@/components/tickets/ai-badge";
@@ -15,6 +15,7 @@ import { RichBody } from "@/components/tickets/rich-body";
 import { StatusBadge } from "@/components/tickets/status-badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Modal } from "@/components/ui/modal";
 import { RichEditor } from "@/components/ui/rich-editor";
 import { api, getApiErrorMessage } from "@/lib/api";
 import { extractTicketId } from "@/lib/slug";
@@ -33,6 +34,9 @@ export default function CustomerTicketDetailPage() {
   const [editDescription, setEditDescription] = useState("");
   const [editingCommentId, setEditingCommentId] = useState<string | null>(null);
   const [editingCommentBody, setEditingCommentBody] = useState("");
+  const [actionsOpen, setActionsOpen] = useState(false);
+  const [confirmDeleteOpen, setConfirmDeleteOpen] = useState(false);
+  const actionsRef = useRef<HTMLDivElement | null>(null);
 
   // Refs track previous values to fire one-shot toasts on state transitions.
   const prevAiClassified = useRef<boolean | null>(null);
@@ -78,6 +82,21 @@ export default function CustomerTicketDetailPage() {
     prevAssignedTo.current = ticket.assigned_to;
   }, [ticket]);
 
+  useEffect(() => {
+    function onClickOutside(event: MouseEvent) {
+      if (!actionsRef.current) return;
+      if (!actionsRef.current.contains(event.target as Node)) {
+        setActionsOpen(false);
+      }
+    }
+
+    if (actionsOpen) {
+      document.addEventListener("mousedown", onClickOutside);
+    }
+
+    return () => document.removeEventListener("mousedown", onClickOutside);
+  }, [actionsOpen]);
+
   const { data: comments = [] } = useQuery({
     queryKey: ["ticket-comments", id],
     queryFn: async () => (await api.get<Comment[]>(`/tickets/${id}/comments`)).data,
@@ -107,9 +126,6 @@ export default function CustomerTicketDetailPage() {
   }
 
   async function deleteTicket() {
-    if (!confirm("Delete this ticket from your view? Admin can still see it for tracking.")) {
-      return;
-    }
     try {
       await api.delete(`/tickets/${id}`);
       toast.success("Ticket removed from your list");
@@ -171,25 +187,46 @@ export default function CustomerTicketDetailPage() {
             <>
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <h2 className="font-[var(--font-display)] text-2xl">{ticket.title}</h2>
-                <div className="flex items-center gap-2">
-                  {canEditTicket && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      onClick={() => {
-                        setEditTitle(ticket.title);
-                        setEditDescription(ticket.description);
-                        setIsEditingTicket(true);
-                      }}
-                    >
-                      <Pencil className="mr-1 h-4 w-4" />
-                      Edit
-                    </Button>
+                <div ref={actionsRef} className="relative">
+                  <button
+                    type="button"
+                    aria-label="Open ticket actions"
+                    onClick={() => setActionsOpen((prev) => !prev)}
+                    className="focus-ring inline-flex h-10 w-10 items-center justify-center rounded-lg border border-[var(--line)] bg-white text-[var(--ink)] hover:bg-[var(--paper)]"
+                  >
+                    <MoreVertical className="h-5 w-5" />
+                  </button>
+
+                  {actionsOpen && (
+                    <div className="absolute right-0 z-20 mt-2 w-44 rounded-lg border border-[var(--line)] bg-white p-1 shadow-lg">
+                      {canEditTicket && (
+                        <button
+                          type="button"
+                          className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-[var(--paper)]"
+                          onClick={() => {
+                            setActionsOpen(false);
+                            setEditTitle(ticket.title);
+                            setEditDescription(ticket.description);
+                            setIsEditingTicket(true);
+                          }}
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--danger)] hover:bg-rose-50"
+                        onClick={() => {
+                          setActionsOpen(false);
+                          setConfirmDeleteOpen(true);
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </button>
+                    </div>
                   )}
-                  <Button type="button" variant="secondary" onClick={deleteTicket}>
-                    <Trash2 className="mr-1 h-4 w-4" />
-                    Delete
-                  </Button>
                 </div>
               </div>
               <RichBody text={ticket.description} className="mt-2 text-[var(--muted)]" />
@@ -290,6 +327,35 @@ export default function CustomerTicketDetailPage() {
       <div className="col-span-12 lg:col-span-4">
         <ActivityTimeline activities={ticket.activities ?? []} />
       </div>
+
+      <Modal
+        open={confirmDeleteOpen}
+        title="Delete Ticket"
+        onClose={() => setConfirmDeleteOpen(false)}
+      >
+        <p className="text-sm text-[var(--muted)]">
+          This will remove the ticket from your customer view. Admin can still track it for audit.
+        </p>
+        <div className="mt-4 flex items-center justify-end gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            onClick={() => setConfirmDeleteOpen(false)}
+          >
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant="danger"
+            onClick={async () => {
+              setConfirmDeleteOpen(false);
+              await deleteTicket();
+            }}
+          >
+            Delete
+          </Button>
+        </div>
+      </Modal>
     </div>
   );
 }
