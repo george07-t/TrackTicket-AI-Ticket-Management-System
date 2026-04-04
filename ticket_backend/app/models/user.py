@@ -85,6 +85,7 @@ class User(Base):
     comments = relationship(
         "Comment",
         back_populates="author",
+        foreign_keys="Comment.author_id",
         passive_deletes=True,
         passive_updates=True,
     )

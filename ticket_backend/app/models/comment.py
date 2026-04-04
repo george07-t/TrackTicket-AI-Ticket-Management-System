@@ -34,5 +34,5 @@ class Comment(Base):
     )
 
     ticket = relationship("Ticket", back_populates="comments")
-    author = relationship("User", back_populates="comments")
+    author = relationship("User", back_populates="comments", foreign_keys=[author_id])
     edited_by = relationship("User", foreign_keys=[edited_by_id])
